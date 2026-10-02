@@ -1,21 +1,23 @@
 /* Drives the real server over HTTP: join, guess, timeout, kick, reset. */
 const BASE = process.env.BASE || "http://127.0.0.1:3111";
-let cookie = "";
-const jar = (res) => {
-  const sc = res.headers.getSetCookie?.() || [];
-  for (const c of sc) if (c.startsWith("mwq_pid=")) cookie = c.split(";")[0];
-};
+const jars = { me: "", other: "" };
+let who = "me";
+const as = (k) => { who = k; };
 async function call(path, method = "GET", body) {
+  const cookie = jars[who];
   const res = await fetch(BASE + path, {
     method,
     headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(cookie ? { Cookie: cookie } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
-  jar(res);
+  for (const c of res.headers.getSetCookie?.() || []) {
+    if (c.startsWith("mwq_pid=")) jars[who] = c.split(";")[0];
+  }
   const text = await res.text();
   let data = null; try { data = JSON.parse(text); } catch {}
   return { status: res.status, data, text };
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ok = (label, cond, extra = "") => console.log(`${cond ? "PASS" : "FAIL"}  ${label}${extra ? "  " + extra : ""}`);
 let failures = 0;
 const check = (l, c, e) => { if (!c) failures++; ok(l, c, e); };
@@ -28,11 +30,46 @@ check("healthz responds", r.status === 200 && r.data.ok);
 r = await call("/api/state");
 check("anonymous state is not joined", r.data.joined === false, `puzzles=${r.data.puzzleCount}`);
 
-// join
+// ---- lobby ----------------------------------------------------------------
 r = await call("/api/join", "POST", { name: "  Tester  " });
+check("join lands in the lobby", r.status === 200 && r.data.waiting === true && r.data.phase === "lobby");
+check("name trimmed", r.data.name === "Tester");
+check("no clue dealt in the lobby", r.data.current.hint === null && r.data.current.length === null);
+check("no clock in the lobby", r.data.current.startedAt === null);
+r = await call("/api/guess", "POST", { guess: "THOR" });
+check("cannot guess before the go", r.status === 409 && r.data.error === "not_started");
+
+// a second player joins the same lobby
+as("other");
+r = await call("/api/join", "POST", { name: "Rival" });
+check("second player joins the lobby", r.data.waiting === true);
+as("me");
+
+// host starts with a short countdown
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+check("start accepted", r.data.ok === true && typeof r.data.startsAt === "number");
+const goAt = r.data.startsAt;
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+check("cannot start twice", r.status === 409 && r.data.error === "already_running");
+
+r = await call("/api/state");
+check("counting down after the go is pressed", r.data.counting === true && r.data.phase === "running");
+check("clue still withheld mid-countdown", r.data.current.hint === null);
+r = await call("/api/guess", "POST", { guess: "THOR" });
+check("cannot guess mid-countdown", r.status === 409 && r.data.error === "counting_down");
+
+await sleep(Math.max(0, goAt - Date.now()) + 250);
+
+r = await call("/api/state");
 const s0 = r.data;
-check("join succeeds", r.status === 200 && s0.name === "Tester");
-check("cookie issued", /^mwq_pid=[a-f0-9]{32}$/.test(cookie));
+check("first word appears after the countdown", s0.counting === false && !!s0.current.hint);
+check("both players share one start instant", s0.current.startedAt === goAt, `startedAt=${s0.current.startedAt} goAt=${goAt}`);
+as("other");
+const rival = (await call("/api/state")).data;
+check("rival got the identical start instant", rival.current.startedAt === goAt);
+as("me");
+check("join succeeds", s0.name === "Tester");
+check("cookie issued", /^mwq_pid=[a-f0-9]{32}$/.test(jars.me));
 check("first puzzle served with a clue", !!s0.current.hint && s0.current.length >= 4);
 check("ANSWER WITHHELD while open", s0.current.answer === null, `answer=${JSON.stringify(s0.current.answer)}`);
 check("clock started", typeof s0.current.startedAt === "number");
@@ -109,7 +146,14 @@ r = await call("/api/state");
 check("reinstated player resumes with progress", r.data.removed === false && r.data.solved === 1,
   `solved=${r.data.solved}`);
 
-// word list validation
+// ---- late joiner --------------------------------------------------------
+as("other");
+r = await call("/api/admin/board");
+const rivalRow = r.data.players.find((p) => p.name === "Rival");
+check("on-time player is not flagged late", rivalRow && rivalRow.late === false);
+as("me");
+
+// ---- word list validation
 r = await call("/api/admin/words", "PUT", { puzzles: [{ answer: "XX", hint: "too short" }] });
 check("bad word list refused", r.status === 400, r.data?.message);
 r = await call("/api/admin/words", "PUT", { puzzles: [{ answer: "LOKI", hint: "loki himself" }] });
@@ -120,15 +164,19 @@ r = await call("/api/admin/reset", "POST");
 check("reset accepted", r.data.ok === true);
 r = await call("/api/admin/board");
 check("board empty after reset", r.data.players.length === 0);
+r = await call("/api/admin/board");
+check("reset returns the round to the lobby", r.data.phase === "lobby" && r.data.startsAt === null);
 r = await call("/api/state");
 check("reset clears the player server-side", r.data.joined === false);
 r = await call("/api/join", "POST", { name: "Tester" });
-check("re-entry restarts at puzzle 1 with nothing solved",
-  r.data.idx === 0 && r.data.solved === 0 && r.data.current.answer === null,
-  `idx=${r.data.idx} solved=${r.data.solved}`);
+check("re-entry waits in the lobby again",
+  r.data.waiting === true && r.data.idx === 0 && r.data.solved === 0,
+  `phase=${r.data.phase}`);
 r = await call("/api/admin/board");
 check("board shows the re-entered player at zero",
   r.data.players.length === 1 && r.data.players[0].solved === 0);
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+check("a second round can be started", r.data.ok === true);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

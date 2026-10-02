@@ -243,3 +243,82 @@ table.board tr:last-child td{border-bottom:0}
   .panel,.qrcard,.howto,.table-scroll,.pod,.settings{box-shadow:3px 3px 0 var(--panel-shadow)}
   .board-head h2{font-size:27px}
 }
+
+/* ---------- lobby + countdown ---------- */
+.lobbydots{display:flex;gap:9px;justify-content:center}
+.lobbydots i{width:11px;height:11px;border-radius:50%;background:var(--red);display:block;animation:bob 1.3s ease-in-out infinite}
+.lobbydots i:nth-child(2){animation-delay:.18s}
+.lobbydots i:nth-child(3){animation-delay:.36s}
+@keyframes bob{0%,100%{opacity:.28;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
+.bignum{
+  font-family:"Big Shoulders Display",sans-serif;font-weight:800;
+  font-size:clamp(90px,34vw,180px);line-height:.82;color:var(--red);
+  font-variant-numeric:tabular-nums;margin:6px 0 10px;
+}
+.bignum.kick{animation:kick .32s ease-out}
+@keyframes kick{from{transform:scale(1.22);opacity:.55}to{transform:scale(1);opacity:1}}
+.phasepill{
+  display:inline-flex;align-items:center;gap:7px;border:2px solid var(--ink);border-radius:2px;
+  padding:4px 10px;font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:14px;
+  letter-spacing:.1em;text-transform:uppercase;
+}
+.phasepill.lobby{background:var(--gold);color:var(--on-solid);border-color:var(--gold)}
+.phasepill.running{background:var(--green);color:var(--on-solid);border-color:var(--green)}
+.gostrip{
+  border:2px solid var(--ink);border-radius:3px;background:var(--surface);box-shadow:5px 5px 0 var(--panel-shadow);
+  padding:16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.gostrip h3{font-size:25px;line-height:1;margin:0}
+.gostrip .grow{flex:1 1 220px;min-width:0}
+.golate{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);
+  border:1.5px solid var(--gold);border-radius:2px;padding:0 4px;margin-left:5px;vertical-align:1px}
+@media (max-width:480px){.gostrip{box-shadow:3px 3px 0 var(--panel-shadow)}}
+
+/* ---------- artwork ---------- */
+#backdrop{
+  position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
+  opacity:0;transition:opacity .5s ease;
+}
+body.art-on #backdrop{opacity:1}
+.topbar,main{position:relative;z-index:1}
+
+.wordmark .emblem{display:inline-flex;align-items:center;margin-right:3px;color:var(--ink)}
+.art-emblem{display:block}
+
+.burstwrap{position:relative;display:block}
+.art-burst{position:absolute;inset:-18% -8%;width:116%;height:136%;z-index:0;pointer-events:none}
+.burstwrap > *:not(.art-burst){position:relative;z-index:1}
+
+.art-pop{
+  position:absolute;inset:-14% -6%;z-index:3;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+  animation:popout .76s ease-out forwards;
+}
+.art-pop svg{position:absolute;inset:0;width:100%;height:100%}
+.art-pop span{
+  position:relative;font-family:"Big Shoulders Display",sans-serif;font-weight:800;
+  font-size:clamp(22px,7vw,40px);letter-spacing:.06em;text-transform:uppercase;color:#FFF;
+  -webkit-text-stroke:2px var(--ink);paint-order:stroke fill;
+}
+@keyframes popout{
+  0%{transform:scale(.5) rotate(-7deg);opacity:0}
+  28%{transform:scale(1.06) rotate(2deg);opacity:1}
+  70%{transform:scale(1) rotate(0deg);opacity:1}
+  100%{transform:scale(1.04);opacity:0}
+}
+
+.soundbtn{
+  appearance:none;cursor:pointer;touch-action:manipulation;
+  border:2px solid var(--hair);border-radius:999px;background:transparent;color:var(--muted);
+  font-family:"Chivo",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 11px;white-space:nowrap;
+}
+.soundbtn[aria-pressed="true"]{border-color:var(--green);color:var(--green)}
+.soundbtn:focus-visible{outline:3px solid var(--azure);outline-offset:2px}
+
+.lobbyart{position:relative;overflow:hidden}
+.lobbyart .art-emblem{margin:0 auto}
+.emblem-big{display:flex;justify-content:center;margin-bottom:4px;color:var(--ink);animation:hover 3.4s ease-in-out infinite}
+@keyframes hover{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.emblem-big{animation:none}}
+.gobadge{display:inline-flex;align-items:center;color:var(--ink);flex:0 0 auto}

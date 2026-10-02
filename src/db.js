@@ -29,10 +29,13 @@ function tx(fn) {
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS rounds (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at  INTEGER NOT NULL,
-    limit_ms    INTEGER NOT NULL,
-    puzzle_count INTEGER NOT NULL
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at   INTEGER NOT NULL,
+    limit_ms     INTEGER NOT NULL,
+    puzzle_count INTEGER NOT NULL,
+    phase        TEXT NOT NULL DEFAULT 'lobby',
+    starts_at    INTEGER,
+    countdown_ms INTEGER NOT NULL DEFAULT 5000
   );
   CREATE TABLE IF NOT EXISTS players (
     id        TEXT PRIMARY KEY,
@@ -60,6 +63,15 @@ db.exec(`
     blocked_at INTEGER NOT NULL
   );
 `);
+
+/* Databases created before the lobby existed get the new columns added. */
+function ensureColumn(table, name, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+ensureColumn("rounds", "phase", "phase TEXT NOT NULL DEFAULT 'lobby'");
+ensureColumn("rounds", "starts_at", "starts_at INTEGER");
+ensureColumn("rounds", "countdown_ms", "countdown_ms INTEGER NOT NULL DEFAULT 5000");
 
 /* ---------- word list ---------- */
 
@@ -97,16 +109,35 @@ export function activeRound() {
   return newRound(DEFAULT_LIMIT_MS);
 }
 
-export function newRound(limitMs) {
+export function newRound(limitMs, countdownMs = 5000) {
   const puzzles = loadPuzzles();
   const info = db.prepare(
-    "INSERT INTO rounds (started_at, limit_ms, puzzle_count) VALUES (?, ?, ?)"
-  ).run(Date.now(), limitMs, puzzles.length);
+    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms) VALUES (?, ?, ?, 'lobby', NULL, ?)"
+  ).run(Date.now(), limitMs, puzzles.length, countdownMs);
   return db.prepare("SELECT * FROM rounds WHERE id = ?").get(Number(info.lastInsertRowid));
 }
 
 export function setRoundLimit(roundId, limitMs) {
   db.prepare("UPDATE rounds SET limit_ms = ? WHERE id = ?").run(limitMs, roundId);
+}
+
+/**
+ * Leave the lobby. Everyone already waiting gets puzzle 1 stamped with the SAME
+ * start instant, so the countdown lands identically for all of them and network
+ * jitter cannot hand anyone a head start.
+ */
+export function startRound(roundId, countdownMs) {
+  const startsAt = Date.now() + countdownMs;
+  tx(() => {
+    db.prepare("UPDATE rounds SET phase = 'running', starts_at = ?, countdown_ms = ? WHERE id = ?")
+      .run(startsAt, countdownMs, roundId);
+    const waiting = db.prepare("SELECT id FROM players WHERE round_id = ? AND blocked = 0").all(roundId);
+    const ins = db.prepare(
+      "INSERT OR REPLACE INTO progress (player_id, puzzle_idx, status, started_at) VALUES (?, 0, 'open', ?)"
+    );
+    for (const p of waiting) ins.run(p.id, startsAt);
+  });
+  return db.prepare("SELECT * FROM rounds WHERE id = ?").get(roundId);
 }
 
 /* ---------- players ---------- */
@@ -190,20 +221,25 @@ export function allRows(playerId) {
   return db.prepare("SELECT * FROM progress WHERE player_id = ? ORDER BY puzzle_idx").all(playerId);
 }
 
-/** Serve a puzzle: creates the row and stamps the start time, once. */
-export function openRow(playerId, idx) {
+/**
+ * Serve a puzzle: creates the row and stamps its start time, once.
+ * `startedAt` lets the caller pin a shared instant (the synchronised go) instead
+ * of whenever this particular request happened to arrive.
+ */
+export function openRow(playerId, idx, startedAt) {
+  const at = typeof startedAt === "number" ? startedAt : Date.now();
   const existing = getRow(playerId, idx);
   if (existing) {
     if (existing.status === "open" && !existing.started_at) {
       db.prepare("UPDATE progress SET started_at = ? WHERE player_id = ? AND puzzle_idx = ?")
-        .run(Date.now(), playerId, idx);
+        .run(at, playerId, idx);
       return getRow(playerId, idx);
     }
     return existing;
   }
   db.prepare(
     "INSERT INTO progress (player_id, puzzle_idx, status, started_at) VALUES (?, ?, 'open', ?)"
-  ).run(playerId, idx, Date.now());
+  ).run(playerId, idx, at);
   return getRow(playerId, idx);
 }
 

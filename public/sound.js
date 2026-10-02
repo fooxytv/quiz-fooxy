@@ -1,0 +1,283 @@
+/*
+ * All audio is synthesised in the browser from oscillators and filtered noise.
+ * There are no sound files, no samples, and no transcription of anybody's
+ * recording or theme — the lobby bed is a plain i-VI-III-VII minor loop (a chord
+ * sequence, which nobody owns) under a motif written for this page.
+ *
+ * Nothing makes a sound until someone asks for it: browsers block audio before a
+ * gesture anyway, and a quiz that starts blaring on load would be unforgivable in
+ * a meeting. The choice is remembered per device.
+ */
+(() => {
+  "use strict";
+
+  const LS_KEY = "marvelQuiz.sound";
+  const BPM = 84;
+  const BEAT = 60 / BPM;
+
+  /* A minor, i - VI - III - VII. Two beats of lead-in per bar of four. */
+  const A2 = 110.0;
+  const PROG = [
+    { root: A2 * 1.0,     third: A2 * 1.1892, fifth: A2 * 1.4983 }, // Am
+    { root: A2 * 0.7937,  third: A2 * 1.0,    fifth: A2 * 1.1892 }, // F
+    { root: A2 * 1.1892,  third: A2 * 1.4983, fifth: A2 * 1.7818 }, // C
+    { root: A2 * 0.8909,  third: A2 * 1.1225, fifth: A2 * 1.3348 }, // G
+  ];
+  /* The motif, written for this page: semitones from A, and the beat it lands on.
+     It answers itself across the last two bars rather than repeating every bar. */
+  const MOTIF_A = [[0, 0], [3, 0.75], [7, 1.5], [5, 2.5]];
+  const MOTIF_B = [[8, 0.5], [7, 1.5], [3, 2.5], [0, 3.25]];
+  const semi = (base, n) => base * Math.pow(2, n / 12);
+
+  let ctx = null;
+  let master = null;
+  let enabled = false;
+  let loopOn = false;
+  let timer = 0;
+  let nextTime = 0;
+  let step = 0;
+
+  try { enabled = localStorage.getItem(LS_KEY) === "1"; } catch (e) { enabled = false; }
+
+  function ensure() {
+    if (ctx) return ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = 0.3;
+    master.connect(ctx.destination);
+    return ctx;
+  }
+
+  function noiseBuffer() {
+    if (noiseBuffer.cached) return noiseBuffer.cached;
+    const n = Math.floor(ctx.sampleRate * 0.6);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    noiseBuffer.cached = buf;
+    return buf;
+  }
+
+  /* ------------------------------------------------------------- voices --- */
+
+  /** A brass-ish tone: two detuned saws through a swept lowpass. */
+  function brass(freq, at, dur, level = 0.18) {
+    const g = ctx.createGain();
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(600, at);
+    f.frequency.linearRampToValueAtTime(2600, at + Math.min(0.14, dur * 0.4));
+    f.frequency.linearRampToValueAtTime(900, at + dur);
+    f.Q.value = 6;
+
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.035);
+    g.gain.setValueAtTime(level, at + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+
+    for (const cents of [-6, 6]) {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = freq * Math.pow(2, cents / 1200);
+      o.connect(f);
+      o.start(at);
+      o.stop(at + dur + 0.05);
+    }
+    f.connect(g).connect(master);
+  }
+
+  /** A soft sustained pad for the chord bed. */
+  function pad(freq, at, dur, level = 0.05) {
+    const g = ctx.createGain();
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 1100;
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.5);
+    g.gain.setValueAtTime(level, at + dur - 0.6);
+    g.gain.linearRampToValueAtTime(0, at + dur);
+    const o = ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = freq;
+    o.connect(f).connect(g).connect(master);
+    o.start(at);
+    o.stop(at + dur + 0.05);
+  }
+
+  /** Timpani: a pitched thud with a noise transient. */
+  function drum(at, freq = 68, level = 0.3) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(level, at);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.42);
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq * 1.6, at);
+    o.frequency.exponentialRampToValueAtTime(freq, at + 0.1);
+    o.connect(g).connect(master);
+    o.start(at);
+    o.stop(at + 0.45);
+
+    const n = ctx.createBufferSource();
+    n.buffer = noiseBuffer();
+    const nf = ctx.createBiquadFilter();
+    nf.type = "bandpass";
+    nf.frequency.value = 220;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(level * 0.5, at);
+    ng.gain.exponentialRampToValueAtTime(0.0001, at + 0.1);
+    n.connect(nf).connect(ng).connect(master);
+    n.start(at);
+    n.stop(at + 0.12);
+  }
+
+  function blip(freq, at, dur = 0.1, level = 0.2, type = "square") {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    o.connect(g).connect(master);
+    o.start(at);
+    o.stop(at + dur + 0.02);
+  }
+
+  /* ---------------------------------------------------------- lobby loop --- */
+
+  /* One bar per chord, scheduled a little ahead of the clock. */
+  function scheduleBar(barIndex, at) {
+    const chord = PROG[barIndex % PROG.length];
+    const bar = BEAT * 4;
+
+    pad(chord.root / 2, at, bar, 0.055);
+    pad(chord.third, at, bar, 0.03);
+    pad(chord.fifth, at, bar, 0.03);
+
+    drum(at, 66, 0.26);
+    drum(at + BEAT * 2.5, 60, 0.15);
+
+    /* The motif enters only on the back half of the loop, so it does not nag. */
+    const phrase = barIndex % PROG.length === 2 ? MOTIF_A : barIndex % PROG.length === 3 ? MOTIF_B : null;
+    if (phrase) {
+      for (const [deg, beat] of phrase) {
+        brass(semi(chord.root * 2, deg), at + beat * BEAT, BEAT * 0.62, 0.075);
+      }
+    }
+  }
+
+  function pump() {
+    if (!loopOn || !ctx) return;
+    const bar = BEAT * 4;
+    while (nextTime < ctx.currentTime + 0.4) {
+      scheduleBar(step, nextTime);
+      step++;
+      nextTime += bar;
+    }
+    timer = setTimeout(pump, 120);
+  }
+
+  function lobbyStart() {
+    if (!enabled || loopOn) return;
+    if (!ensure()) return;
+    if (ctx.state === "suspended") ctx.resume();
+    loopOn = true;
+    step = 0;
+    nextTime = ctx.currentTime + 0.12;
+    pump();
+  }
+
+  function lobbyStop() {
+    loopOn = false;
+    clearTimeout(timer);
+  }
+
+  /* ------------------------------------------------------------ stingers --- */
+
+  function at0() {
+    if (!enabled || !ensure()) return null;
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx.currentTime + 0.01;
+  }
+
+  /** Rising pips for 3, 2, 1. */
+  function tick(n) {
+    const t = at0();
+    if (t === null) return;
+    const map = { 3: 523.25, 2: 587.33, 1: 659.25 };
+    blip(map[n] || 523.25, t, 0.12, 0.22, "square");
+  }
+
+  /** The go: a short rising brass hit over a drum. */
+  function go() {
+    const t = at0();
+    if (t === null) return;
+    lobbyStop();
+    drum(t, 72, 0.34);
+    brass(A2 * 2, t, 0.3, 0.16);
+    brass(A2 * 3, t + 0.1, 0.34, 0.14);
+    brass(A2 * 4, t + 0.2, 0.5, 0.13);
+  }
+
+  /** Solved: an ascending figure, brighter the fewer guesses it took. */
+  function solve(tries = 3) {
+    const t = at0();
+    if (t === null) return;
+    const notes = tries <= 2 ? [0, 4, 7, 12] : tries <= 4 ? [0, 4, 7] : [0, 3, 7];
+    notes.forEach((n, i) => blip(semi(440, n), t + i * 0.08, 0.16, 0.17, "triangle"));
+    drum(t, 80, 0.14);
+  }
+
+  /** Missed, or timed out: two descending thuds. */
+  function fail() {
+    const t = at0();
+    if (t === null) return;
+    blip(196, t, 0.22, 0.16, "sawtooth");
+    blip(146.83, t + 0.14, 0.34, 0.14, "sawtooth");
+  }
+
+  /** A quiet click when a letter lands. */
+  function key() {
+    const t = at0();
+    if (t === null) return;
+    blip(1200, t, 0.03, 0.045, "square");
+  }
+
+  /* --------------------------------------------------------------- toggle --- */
+
+  function isOn() { return enabled; }
+
+  function setOn(on) {
+    enabled = !!on;
+    try { localStorage.setItem(LS_KEY, enabled ? "1" : "0"); } catch (e) { /* private mode */ }
+    if (!enabled) {
+      lobbyStop();
+      if (ctx) master.gain.value = 0;
+    } else {
+      if (ensure()) {
+        if (ctx.state === "suspended") ctx.resume();
+        master.gain.value = 0.3;
+      }
+    }
+    return enabled;
+  }
+
+  /** The header control. `onLobby` says whether the bed should resume when unmuted. */
+  function button(el, wantsLobby) {
+    if (!el) return;
+    const paint = () => {
+      el.setAttribute("aria-pressed", String(enabled));
+      el.textContent = enabled ? "Sound on" : "Sound off";
+    };
+    el.onclick = () => {
+      setOn(!enabled);
+      paint();
+      if (enabled && wantsLobby && wantsLobby()) lobbyStart();
+    };
+    paint();
+  }
+
+  window.Sfx = { isOn, setOn, button, lobbyStart, lobbyStop, tick, go, solve, fail, key };
+})();

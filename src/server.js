@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_URL = process.env.PUBLIC_URL || "https://quiz.fooxy.tv";
 const COOKIE_SECURE = process.env.COOKIE_SECURE !== "false";
 const LIMIT_CHOICES = [0, 45000, 60000, 90000, 120000, 180000];
+const COUNTDOWN_CHOICES = [3000, 5000, 10000, 30000];
 const PID_COOKIE = "mwq_pid";
 
 const app = express();
@@ -58,6 +59,8 @@ function cleanName(v) {
  */
 function playerState(player, round, puzzles) {
   const now = Date.now();
+  const waiting = round.phase !== "running";
+  const counting = !waiting && round.starts_at > now;
   const rows = new Map(store.allRows(player.id).map((r) => [r.puzzle_idx, r]));
   const limitMs = round.limit_ms;
 
@@ -92,8 +95,23 @@ function playerState(player, round, puzzles) {
     fact: closed ? puzzles[idx].fact : null,
   };
 
+  /* In the lobby, or mid-countdown, the clue is not the player's to see yet. */
+  if (waiting || counting) {
+    current.hint = null;
+    current.category = null;
+    current.length = null;
+    current.rows = [];
+    current.startedAt = null;
+    current.ms = 0;
+  }
+
   return {
     round: round.id,
+    phase: round.phase,
+    startsAt: round.starts_at,
+    countdownMs: round.countdown_ms,
+    waiting,
+    counting,
     limitMs,
     puzzleCount: puzzles.length,
     maxTries: MAX_TRIES,
@@ -116,7 +134,9 @@ function playerState(player, round, puzzles) {
 function buildBoard() {
   const round = store.activeRound();
   const puzzles = store.loadPuzzles();
-  store.expireRound(round.id, round.limit_ms);
+  if (round.phase === "running" && round.starts_at <= Date.now()) {
+    store.expireRound(round.id, round.limit_ms);
+  }
   const now = Date.now();
 
   const entries = store.roundPlayers(round.id).map((p) => {
@@ -144,6 +164,10 @@ function buildBoard() {
       curStartedAt: current ? current.started_at : null,
       online: now - p.last_seen < 45000,
       joinedAt: p.joined_at,
+      /* Someone who arrived after the go has their own, later start. */
+      late: !!(round.starts_at && p.joined_at > round.starts_at + 1500),
+      /* Wall clock from the shared go to their last finished word. */
+      sinceGo: round.starts_at && round.starts_at <= now ? now - round.starts_at : 0,
     };
   });
 
@@ -151,6 +175,10 @@ function buildBoard() {
 
   return {
     round: round.id,
+    phase: round.phase,
+    startsAt: round.starts_at,
+    countdownMs: round.countdown_ms,
+    countdownChoices: COUNTDOWN_CHOICES,
     limitMs: round.limit_ms,
     puzzleCount: puzzles.length,
     maxTries: MAX_TRIES,
@@ -178,7 +206,10 @@ app.post("/api/join", (req, res) => {
   }
 
   const player = store.upsertPlayer({ id: pid, roundId: round.id, name });
-  store.openRow(player.id, Math.min(player.idx, puzzles.length - 1));
+  if (round.phase === "running") {
+    /* Joining after the go: this player's own clock starts now, not at the go. */
+    store.openRow(player.id, Math.min(player.idx, puzzles.length - 1));
+  }
   broadcastBoard();
   res.json(playerState(store.getPlayer(pid), round, puzzles));
 });
@@ -202,7 +233,7 @@ app.get("/api/state", (req, res) => {
     store.upsertPlayer({ id: player.id, roundId: round.id, name: player.name });
   }
   const fresh = store.getPlayer(player.id);
-  if (!fresh.blocked) {
+  if (!fresh.blocked && round.phase === "running") {
     const idx = Math.min(fresh.idx, puzzles.length - 1);
     store.expireRow(fresh.id, idx, round.limit_ms);
     store.openRow(fresh.id, idx);
@@ -219,6 +250,12 @@ app.post("/api/guess", (req, res) => {
   if (player.blocked) return res.status(403).json({ error: "removed" });
 
   store.touchPlayer(player.id);
+  if (round.phase !== "running") {
+    return res.status(409).json({ error: "not_started", message: "The host hasn't started the quiz yet." });
+  }
+  if (round.starts_at > Date.now()) {
+    return res.status(409).json({ error: "counting_down", message: "Hold on — the countdown is still running." });
+  }
   const idx = Math.min(player.idx, puzzles.length - 1);
   const puzzle = puzzles[idx];
 
@@ -264,6 +301,9 @@ app.post("/api/next", (req, res) => {
   const player = pid ? store.getPlayer(pid) : null;
   if (!player) return res.status(401).json({ error: "not_joined" });
   if (player.blocked) return res.status(403).json({ error: "removed" });
+  if (round.phase !== "running" || round.starts_at > Date.now()) {
+    return res.status(409).json({ error: "not_started" });
+  }
 
   const idx = Math.min(player.idx, puzzles.length - 1);
   store.expireRow(player.id, idx, round.limit_ms);
@@ -291,10 +331,23 @@ app.post("/api/admin/limit", requireAdmin, (req, res) => {
   res.json({ ok: true, limitMs: ms });
 });
 
+app.post("/api/admin/start", requireAdmin, (req, res) => {
+  const round = store.activeRound();
+  if (round.phase === "running") {
+    return res.status(409).json({ error: "already_running", message: "This round is already under way." });
+  }
+  const ms = Number(req.body?.countdownMs);
+  const countdownMs = COUNTDOWN_CHOICES.includes(ms) ? ms : round.countdown_ms;
+  const fresh = store.startRound(round.id, countdownMs);
+  broadcastRound();
+  broadcastBoard();
+  res.json({ ok: true, startsAt: fresh.starts_at, countdownMs });
+});
+
 app.post("/api/admin/reset", requireAdmin, (req, res) => {
   const old = store.activeRound();
   store.wipeRound(old.id);
-  const fresh = store.newRound(old.limit_ms);
+  const fresh = store.newRound(old.limit_ms, old.countdown_ms);
   broadcastRound();
   broadcastBoard();
   res.json({ ok: true, round: fresh.id });
@@ -395,7 +448,14 @@ server.on("upgrade", async (req, socket, head) => {
         });
       }
       const round = store.activeRound();
-      send(ws, { type: "round", round: round.id, limitMs: round.limit_ms, serverNow: Date.now() });
+      send(ws, {
+        type: "round",
+        round: round.id,
+        phase: round.phase,
+        startsAt: round.starts_at,
+        limitMs: round.limit_ms,
+        serverNow: Date.now(),
+      });
     });
     return;
   }
@@ -427,7 +487,14 @@ function broadcastBoard() {
 
 function broadcastRound() {
   const round = store.activeRound();
-  const payload = { type: "round", round: round.id, limitMs: round.limit_ms, serverNow: Date.now() };
+  const payload = {
+    type: "round",
+    round: round.id,
+    phase: round.phase,
+    startsAt: round.starts_at,
+    limitMs: round.limit_ms,
+    serverNow: Date.now(),
+  };
   for (const set of playerSockets.values()) {
     for (const ws of set) send(ws, payload);
   }
@@ -441,6 +508,7 @@ function notifyPlayer(pid, payload) {
 /* Close abandoned words so the board never freezes on someone who wandered off. */
 setInterval(() => {
   const round = store.activeRound();
+  if (round.phase !== "running" || round.starts_at > Date.now()) return;
   if (store.expireRound(round.id, round.limit_ms) > 0) broadcastBoard();
 }, 5000).unref();
 

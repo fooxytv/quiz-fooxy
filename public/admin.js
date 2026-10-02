@@ -17,6 +17,10 @@
   let clockSkew = 0;
   let connected = false;
   let words = null;
+  let autoFlipped = false;   // jump to the leaderboard once, on the go
+  let stopArt = null;
+  let lastTick = null;
+  let wentOnce = false;      // the go sting fires exactly once per round
 
   const $ = (id) => document.getElementById(id);
   const view = $("view");
@@ -33,6 +37,15 @@
   function limitLabel(ms) {
     return ms === 0 ? "Off" : ms < 60000 ? Math.round(ms / 1000) + "s" : (Math.round(ms / 6000) / 10) + " min";
   }
+
+  /* The host screen is the one wired to the room's speakers, so this is where
+     the lobby bed plays. Players' phones get effects only. */
+  function setArt(on) {
+    document.body.classList.toggle("art-on", !!on);
+    if (on && !stopArt) stopArt = window.ComicArt?.backdrop(document.getElementById("backdrop")) || null;
+    if (!on && stopArt) { stopArt(); stopArt = null; }
+  }
+  const inLobbyPhase = () => !!board && board.phase !== "running";
 
   async function api(path, { method = "GET", body } = {}) {
     const res = await fetch(path, {
@@ -96,6 +109,48 @@
     };
   }
 
+  function countdownLabel(ms) { return ms >= 60000 ? Math.round(ms / 60000) + " min" : Math.round(ms / 1000) + "s"; }
+
+  function goStripMarkup() {
+    const inLobby = board.phase !== "running";
+    const counting = !inLobby && board.startsAt > now();
+    const n = board.players.length;
+
+    if (inLobby) {
+      return `<div class="gostrip lobbyart">
+        <span class="phasepill lobby">Lobby</span>
+        <span class="gobadge">${window.ComicArt?.emblem(40) || ""}</span>
+        <div class="grow">
+          <h3>${n ? `${n} ${n === 1 ? "player" : "players"} waiting` : "Nobody has joined yet"}</h3>
+          <p class="meta" style="margin:4px 0 0">No clocks are running. Everyone gets their first word at the same instant when you start.</p>
+        </div>
+        <div class="seg" style="margin:0" role="group" aria-label="Countdown length">
+          ${board.countdownChoices.map((ms) => `<button data-cd="${ms}" aria-pressed="${ms === board.countdownMs}" type="button">${countdownLabel(ms)}</button>`).join("")}
+        </div>
+        <button class="btn" id="goBtn" type="button" ${n ? "" : "disabled"}>${n ? "Start the quiz" : "Waiting for players"}</button>
+      </div>`;
+    }
+
+    if (counting) {
+      return `<div class="gostrip">
+        <span class="phasepill running">Counting in</span>
+        <div class="grow burstwrap">
+          ${window.ComicArt?.starburst({ spikes: 14, opacity: 0.14 }) || ""}
+          <h3>Starting in <span class="mono-num" id="goCount">${Math.ceil((board.startsAt - now()) / 1000)}</span></h3>
+          <p class="meta" style="margin:4px 0 0">Every player sees the same countdown. First word lands for all of them together.</p>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="gostrip">
+      <span class="phasepill running">Under way</span>
+      <div class="grow">
+        <h3>Running for <span class="mono-num" id="goElapsed">${fmt(now() - board.startsAt)}</span></h3>
+        <p class="meta" style="margin:4px 0 0">Time since the go. Reset when you want to gather everyone in the lobby again.</p>
+      </div>
+    </div>`;
+  }
+
   function settingsMarkup() {
     return `<div class="settings">
       <h4>Time limit per word</h4>
@@ -120,8 +175,8 @@
 
   function hostbarMarkup() {
     return `<div class="hostbar">
-      <button class="btn ghost sm" id="resetBtn" type="button">Reset the whole quiz</button>
-      <span class="meta">Wipes every run and restarts all ${board.puzzleCount} puzzles. Tap twice to confirm.</span>
+      <button class="btn ghost sm" id="resetBtn" type="button">Reset to the lobby</button>
+      <span class="meta">Wipes every run and puts everyone back in the lobby, ready for another go. Tap twice to confirm.</span>
       <p class="meta" id="hostMsg"></p>
     </div>`;
   }
@@ -137,10 +192,35 @@
       };
     });
 
+    root.querySelectorAll("[data-cd]").forEach((b) => {
+      b.onclick = async () => {
+        const ms = Number(b.dataset.cd);
+        root.querySelectorAll("[data-cd]").forEach((x) => x.setAttribute("aria-pressed", String(Number(x.dataset.cd) === ms)));
+        board.countdownMs = ms;
+        hostMsg(`Countdown set to ${countdownLabel(ms)}.`, "ok");
+      };
+    });
+
+    const go = root.querySelector("#goBtn");
+    if (go) go.onclick = async () => {
+      go.disabled = true;
+      go.textContent = "Starting";
+      hostMsg("");
+      try {
+        await api("/api/admin/start", { method: "POST", body: { countdownMs: board.countdownMs } });
+        autoFlipped = false;
+      } catch (e) {
+        go.disabled = false;
+        go.textContent = "Start the quiz";
+        hostMsg(e.message, "err");
+      }
+    };
+
     const rb = root.querySelector("#resetBtn");
     if (rb) wireDanger(rb, "Tap again to wipe the board", async () => {
       await api("/api/admin/reset", { method: "POST" });
-      hostMsg("Board cleared. Everyone restarts from puzzle 1.", "ok");
+      autoFlipped = false;
+      hostMsg("Back in the lobby. Start again when everyone's ready.", "ok");
     });
 
     root.querySelectorAll("[data-kick]").forEach((b) => {
@@ -182,6 +262,8 @@
   function renderLobby() {
     const url = board.publicUrl;
     const joined = board.players;
+    setArt(inLobbyPhase());
+    if (inLobbyPhase()) window.Sfx?.lobbyStart();
     view.innerHTML = `
       <div class="lobby">
         <div class="qrcard">
@@ -228,6 +310,7 @@
           </div>
         </div>
       </div>
+      ${goStripMarkup()}
       ${settingsMarkup()}
       ${blockedMarkup()}
       ${hostbarMarkup()}`;
@@ -251,12 +334,14 @@
   }
 
   function renderBoard() {
+    setArt(false);
     const list = board.players;
     const finished = list.filter((p) => p.done).length;
     const cracked = list.reduce((a, p) => a + p.solved, 0);
     const top3 = list.slice(0, 3);
 
     view.innerHTML = `
+      ${goStripMarkup()}
       <div class="board-head">
         <h2>Live standings</h2>
         <span class="spacer"></span>
@@ -279,7 +364,7 @@
           <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Solved</th><th>Time</th><th>Guesses</th><th></th></tr></thead>
           <tbody>${list.map((p, n) => `<tr>
             <td class="rank mono-num ${n === 0 ? "top" : ""}">${n + 1}</td>
-            <td><div class="who-name">${esc(p.name)}</div><div class="who-sub">${p.done ? "Finished" : (p.online ? "On puzzle " + (p.idx + 1) : "Away &middot; puzzle " + (p.idx + 1))}</div></td>
+            <td><div class="who-name">${esc(p.name)}</div><div class="who-sub">${board.phase !== "running" ? "In the lobby" : (p.done ? "Finished" : (p.online ? "On puzzle " + (p.idx + 1) : "Away &middot; puzzle " + (p.idx + 1)))}${p.late ? `<span class="golate" title="Joined after the go, so their clock started later">late</span>` : ""}</div></td>
             <td><div class="pips">${p.results.map((v, i) => `<div class="${pipClass(v, i, p.idx, p.done)}" title="Puzzle ${i + 1}"></div>`).join("")}</div></td>
             <td class="score mono-num">${p.solved}</td>
             <td class="t-cell ${p.done ? "done" : ""}" data-pid="${esc(p.id)}">${fmt(liveMs(p))}</td>
@@ -362,16 +447,47 @@
   /* Patch only the time cells each second, so the QR never flickers. */
   setInterval(() => {
     if (!board || tab === "words") return;
+
     document.querySelectorAll("[data-pid]").forEach((el) => {
       const p = board.players.find((x) => x.id === el.dataset.pid);
       if (p) el.textContent = fmt(liveMs(p));
     });
-  }, 1000);
+
+    if (board.phase === "running" && board.startsAt) {
+      const left = board.startsAt - now();
+      const secs = Math.ceil(left / 1000);
+      if (left > 0 && secs !== lastTick && secs <= 3) {
+        lastTick = secs;
+        window.Sfx?.tick(secs);
+      }
+      if (left <= 0 && !wentOnce) {
+        wentOnce = true;
+        window.Sfx?.go();
+      }
+      const cnt = $("goCount");
+      if (cnt) {
+        if (left > 0) cnt.textContent = secs;
+        else paint();           // countdown finished: redraw as "under way"
+      }
+      const el = $("goElapsed");
+      if (el && left <= 0) el.textContent = fmt(-left);
+    }
+  }, 500);
 
   function adopt(next) {
     if (!next) return;
     clockSkew = next.serverNow - Date.now();
     board = next;
+    /* The host clicked Go to watch, so bring the leaderboard up once. */
+    if (board.phase === "running" && !autoFlipped) {
+      autoFlipped = true;
+      if (tab === "lobby") tab = "board";
+    }
+    if (board.phase !== "running") {
+      autoFlipped = false;
+      wentOnce = false;
+      lastTick = null;
+    }
     if (tab !== "words") paint();
   }
 
@@ -387,6 +503,10 @@
       if (msg.type === "board") adopt(msg.board);
     };
   }
+
+  const em = $("emblem");
+  if (em) em.innerHTML = window.ComicArt?.emblem(26) || "";
+  window.Sfx?.button($("soundBtn"), inLobbyPhase);
 
   setStatus();
   paint();

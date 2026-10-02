@@ -1,11 +1,23 @@
-# Marvel Wordle
+# Six Panels
 
-A Wordle-style Marvel quiz built for a team sprint review. People scan a QR code,
-play twelve words on their phone or laptop, and the host watches a live
-leaderboard on the shared screen. Most words solved wins; if that ties, the
-fastest total time takes it.
+A Wordle-style superhero-film quiz built for a team sprint review. People scan a
+QR code, wait in a lobby, and the host counts everyone in together. Twelve words,
+six guesses each. Most words solved wins; if that ties, the fastest total time
+takes it.
 
 No accounts, no sign-in, no app. Open the link and type your name.
+
+## On the name and the look
+
+The quiz asks about Marvel films, because that is the subject. It is not branded
+as a Marvel product: the badge, the artwork and the music are all original work
+made for this repo, and the on-screen name is **Six Panels** — six guesses, six
+panels — rather than a lockup of somebody else's trademark.
+
+Asking "which Asgardian swings a hammer" is ordinary referential use, the same as
+any pub quiz. Wrapping the page in a publisher's wordmark and logo is a different
+thing, so it does not. If you would rather it said something else, the wordmark is
+two spans near the top of `public/index.html` and `public/admin.html`.
 
 ## Why it is server-authoritative
 
@@ -18,6 +30,42 @@ Two things are deliberately kept out of the browser:
   is enforced there, so a fast total time cannot be faked. Since time decides the
   winner, this matters.
 
+## How a session runs
+
+Players land in a **lobby**: no clue, no clock, nothing to do but wait. The
+server does not even deal them a puzzle yet. When the host presses **Start**,
+everyone gets the same countdown and the first word appears for all of them at a
+single shared instant — the server stamps one `starts_at` and writes it to every
+waiting player's first puzzle, so network jitter cannot hand anyone a head start.
+
+From there it is a race at each person's own pace. Someone who joins after the go
+starts their own clock then and is flagged `late` on the board, so you can see it
+rather than wonder.
+
+A reset puts everybody back in the lobby, ready to run it again.
+
+## Artwork and music
+
+Everything is generated at run time; there are no media files in this repo and
+nothing is sampled, traced or transcribed from anyone's property.
+
+- `public/art.js` draws the backdrop on a canvas — drifting halftone dots and
+  raking speed lines — plus the hexagonal badge, ink starbursts behind the
+  countdown, and the burst that pops when a word falls. It reads its colours from
+  the CSS custom properties, so it follows both themes, and it holds still for
+  `prefers-reduced-motion`.
+- `public/sound.js` synthesises its audio from oscillators and filtered noise via
+  Web Audio. The lobby bed is a plain four-bar minor loop (a chord sequence,
+  which nobody owns) under a motif written for this page, with a timpani pulse;
+  on top of that sit countdown pips, a hit on the go, and short stings for a
+  solve or a miss.
+
+**Sound is off until someone turns it on**, and the choice is remembered per
+device. The full lobby bed plays only on the **host** screen, which is the one
+wired to the room's speakers; players' phones get the short effects only, because
+a dozen handsets playing the same loop a few milliseconds apart sounds like a
+fault. There is a Sound button in the header of both pages.
+
 ## Stack
 
 Node 24 (`node:sqlite`, built in — no native modules to compile), Express, `ws`
@@ -25,12 +73,32 @@ for live updates, and `qrcode` to render the join code server-side. One containe
 plus a `cloudflared` sidecar. State lives in SQLite on a volume and survives
 restarts, so you get history across sessions rather than one throwaway game.
 
-## Running it
+## Running it on your server
 
 ```bash
-cp .env.example .env     # then fill in the Cloudflare Access values
-docker compose up -d --build
+git clone https://github.com/fooxytv/quiz-fooxy.git && cd quiz-fooxy
+cp .env.example .env     # then fill in the Cloudflare values
+./scripts/deploy.sh
 ```
+
+`deploy.sh` builds the image, brings the stack up, waits for the container to
+report healthy, and prints the player and host URLs. If the build fails or the
+container comes up unhealthy it shows you the last 40 log lines and exits
+non-zero, rather than claiming success.
+
+| | |
+|---|---|
+| `./scripts/build.sh` | build the image only, tagged `latest` and the git sha |
+| `./scripts/deploy.sh` | build, start, wait for healthy |
+| `./scripts/logs.sh [service]` | follow the logs (`quiz` by default, or `tunnel`) |
+| `./scripts/backup.sh [dir]` | consistent SQLite snapshot plus the word list |
+
+`deploy.sh` warns if `CF_ACCESS_AUD` or `CF_ACCESS_TEAM_DOMAIN` are still unset
+or left as the placeholder — the admin portal refuses everything in that state,
+so it is better to hear about it before the review than during it.
+
+To redeploy after a change: `git pull && ./scripts/deploy.sh`. The SQLite file
+lives in the `quiz-data` volume, so results survive rebuilds.
 
 Locally, without Cloudflare:
 
@@ -76,14 +144,18 @@ account.
 
 ## Hosting a session
 
-1. Open `/admin` and leave it on **Join screen**. Project it.
-2. People scan the QR, type a name, and start. Names appear as they arrive.
-3. Pick a **time limit per word** (default 90s, or off). It applies immediately.
-4. Flip to **Leaderboard** when everyone is in. Times tick live.
+1. Open `/admin`, leave it on **Join screen**, and project it. Turn **Sound on**
+   if the screen has speakers.
+2. People scan the QR, type a name, and land in the lobby. Names appear as they
+   arrive. Nobody's clock is running.
+3. Pick a **time limit per word** (default 90s, or off) and a **countdown**
+   length (3s, 5s, 10s or 30s).
+4. Press **Start the quiz**. Everyone sees the same countdown; the host view
+   flips itself to the leaderboard so you can watch.
 5. **Remove** takes someone off the board; they can be let back in, keeping the
    run they had.
-6. **Reset the whole quiz** wipes every run and restarts. Players' pages restart
-   on their own, keeping their names.
+6. **Reset to the lobby** wipes every run and gathers everyone again for another
+   go. Players' pages return to the lobby on their own, keeping their names.
 
 Destructive buttons need two taps — no accidental mid-session wipe.
 
@@ -98,12 +170,18 @@ twelve built-in puzzles.
 ## Layout
 
 ```
-src/words.js    the puzzles, and the only shape a client may see
-src/game.js     marking, scoring, ranking
-src/db.js       SQLite schema and queries
-src/auth.js     Cloudflare Access JWT verification
-src/server.js   HTTP + WebSocket
-public/         player page, host portal, shared stylesheet
+src/words.js      the puzzles, and the only shape a client may see
+src/game.js       marking, scoring, ranking
+src/db.js         SQLite schema, queries, round phases
+src/auth.js       Cloudflare Access JWT verification
+src/server.js     HTTP + WebSocket
+public/app.js     player client (holds no answers, keeps no authority)
+public/admin.js   host portal
+public/art.js     procedural comic artwork
+public/sound.js   procedural audio
+public/styles.css one stylesheet, both themes
+scripts/          build, deploy, logs, backup
+test/smoke.mjs    end-to-end suite
 ```
 
 ## API
@@ -119,6 +197,7 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 | `POST /api/next` | advance, stamping the next word's start time |
 | `WS /ws` | round and removal events |
 | `GET /api/admin/board` | full leaderboard |
+| `POST /api/admin/start` | `{countdownMs}` → leaves the lobby on a shared instant |
 | `POST /api/admin/limit` | `{limitMs}` |
 | `POST /api/admin/reset` | new round, board wiped |
 | `POST /api/admin/kick` / `unkick` | `{playerId}` |
@@ -127,7 +206,15 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 
 ## Tests
 
-`npm test` against a running server (see `test/smoke.mjs`) exercises joining, marking,
-duplicate letters, answer withholding, the timeout, kick and reinstate, word-list
-validation and reset. Thirty-eight checks, including an explicit assertion that
-no answer appears anywhere in the board payload.
+```bash
+npm run dev          # terminal one
+npm test             # terminal two
+```
+
+Fifty-two checks against a live server (`test/smoke.mjs`), driving two players at
+once: the lobby refusing guesses before the go, the clue staying hidden through
+the countdown, **both players receiving a byte-identical start instant**, marking
+and duplicate letters, answers staying withheld until a word closes, the
+server-enforced timeout, kick and reinstate, word-list validation, and a reset
+returning the round to the lobby. One check asserts that no answer appears
+anywhere in the board payload.
