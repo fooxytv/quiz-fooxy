@@ -289,21 +289,50 @@ if (victim) {
   await call("/api/admin/kick", "POST", { playerId: victim.id });
   r = await call("/api/state");
   check("removed player is out", r.data.removed === true);
-  r = await call("/api/admin/reset", "POST");
-  check("reset keeps the removal", r.data.blockedKept >= 1, `blockedKept=${r.data.blockedKept}`);
   r = await call("/api/admin/board");
-  const stillBlocked = r.data.blocked.find((b) => b.id === victim.id);
-  check("still on the removed list after a reset", !!stillBlocked);
-  check("removed list remembers the name", stillBlocked && stillBlocked.name === "Rival",
-    `name=${stillBlocked && stillBlocked.name}`);
+  const listed = r.data.blocked.find((b) => b.id === victim.id);
+  check("the removed list names them while the round stands", !!listed && listed.name === "Rival",
+    `name=${listed && listed.name}`);
   r = await call("/api/join", "POST", { name: "Rival" });
-  check("a removed player rejoining is still removed", r.data.removed === true);
+  check("a removed player cannot rejoin the same round", r.data.removed === true);
+
+  r = await call("/api/admin/reset", "POST");
+  check("a reset clears the removed list", r.data.blocked === 0, `blocked=${r.data.blocked}`);
   r = await call("/api/admin/board");
-  check("removed player stays off the board", !r.data.players.some((p) => p.id === victim.id));
+  check("removed list is empty after a reset", r.data.blocked.length === 0);
+  r = await call("/api/join", "POST", { name: "Rival" });
+  check("they can join the next round normally", r.data.removed === false);
+
+  /* And the explicit control, for clearing without resetting. */
+  await call("/api/admin/kick", "POST", { playerId: victim.id });
+  r = await call("/api/admin/clear-removed", "POST");
+  check("clear-removed empties the list", r.data.ok === true && r.data.cleared >= 1);
+  r = await call("/api/admin/board");
+  check("nothing left on the removed list", r.data.blocked.length === 0);
 } else {
   check("rival present to remove", false, "could not find the second player");
 }
 as("me");
+
+/*
+ * Tidy up. This suite drives a real server against a real database -- the local
+ * Docker stack shares its volume with actual play -- so it must not leave players,
+ * removals or a half-finished round behind. It previously left a blocked player
+ * called "Rival" sitting in the host's removed list for good.
+ */
+try {
+  as("me");
+  await call("/api/admin/clear-removed", "POST");
+  await call("/api/admin/reset", "POST");
+  const after = await call("/api/admin/board");
+  const clean = (after.data?.players?.length ?? 0) === 0
+    && (after.data?.blocked?.length ?? 0) === 0
+    && after.data?.phase === "lobby";
+  check("suite leaves no players, removals or running round behind", clean,
+    `players=${after.data?.players?.length} blocked=${after.data?.blocked?.length} phase=${after.data?.phase}`);
+} catch (e) {
+  check("cleanup ran", false, e.message);
+}
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

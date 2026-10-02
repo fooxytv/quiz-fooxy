@@ -127,6 +127,10 @@
           ${board.countdownChoices.map((ms) => `<button data-cd="${ms}" aria-pressed="${ms === board.countdownMs}" type="button">${countdownLabel(ms)}</button>`).join("")}
         </div>
         <button class="btn" id="goBtn" type="button" ${n ? "" : "disabled"}>${n ? "Start the quiz" : "Waiting for players"}</button>
+        ${window.Theme?.hasIntro?.() ? `<div class="introctl">
+          <button class="btn ghost sm" id="introPlay" type="button">Play title card</button>
+          <button class="soundbtn" id="introLoop" type="button" aria-pressed="${!!window.Theme?.introLooping?.()}">Loop it</button>
+        </div>` : ""}
       </div>`;
     }
 
@@ -187,14 +191,17 @@
         <span>${esc(b.name || "Unknown")}</span>
         <button class="kick" data-unkick="${esc(b.id)}" type="button">Let back in</button>
       </span>`).join("")}</div>
-      <p class="meta" style="margin:10px 0 0">They see a "removed by the host" screen and stop scoring. A reset does not let them back in &mdash; only this button does.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost sm" id="clearRemoved" type="button">Clear the list</button>
+        <span class="meta">They see a "removed by the host" screen and stop scoring. A removal lasts the rest of the round; a reset clears the list entirely.</span>
+      </div>
     </div>`;
   }
 
   function hostbarMarkup() {
     return `<div class="hostbar">
       <button class="btn ghost sm" id="resetBtn" type="button">Reset and kick everyone</button>
-      <span class="meta">Clears the board and throws everyone out to the join screen &mdash; they each have to join again. Anyone you removed <b>stays removed</b>. Tap twice to confirm.</span>
+      <span class="meta">Clears the board, the removed list and everyone's session &mdash; they each have to join again from scratch. Tap twice to confirm.</span>
       <p class="meta" id="hostMsg"></p>
     </div>`;
   }
@@ -249,6 +256,21 @@
           hostMsg(`Round length is now ${n} questions. Everyone waiting gets a fresh draw.`, "ok");
         } catch (e) { hostMsg(e.message, "err"); }
       };
+    });
+
+    const ip = root.querySelector("#introPlay");
+    if (ip) ip.onclick = () => window.Theme?.playIntro?.();
+    const il = root.querySelector("#introLoop");
+    if (il) il.onclick = () => {
+      const on = window.Theme?.setIntroLoop?.(!window.Theme?.introLooping?.());
+      il.setAttribute("aria-pressed", String(!!on));
+      hostMsg(on ? "Title card will replay on a loop while the lobby is up." : "Title card plays only when you press it.", "ok");
+    };
+
+    const cr = root.querySelector("#clearRemoved");
+    if (cr) wireDanger(cr, "Tap again to clear", async () => {
+      const out = await api("/api/admin/clear-removed", { method: "POST" });
+      hostMsg(out.cleared ? `Cleared ${out.cleared} from the removed list.` : "Nothing to clear.", "ok");
     });
 
     const rb = root.querySelector("#resetBtn");

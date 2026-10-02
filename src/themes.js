@@ -29,9 +29,9 @@ export const BUILTIN_THEMES = [
     name: "Tactical Readout",
     blurb: "The briefing-screen look: counter-rotating instrument rings over a receding floor grid, a scan sweep and corner brackets. Steel and cyan. The best fit for a film quiz on a big screen.",
     scene: "hud",
-    wordmark: { lead: "MCU", tail: "Quiz" },
+    wordmark: { lead: "MARVEL", tail: "Quiz" },
     intro: {
-      title: "MCU QUIZ",
+      title: "MARVEL QUIZ",
       subtitle: "Six guesses each. The clock is running.",
       everyMs: 15000,
     },
@@ -57,7 +57,7 @@ export const BUILTIN_THEMES = [
     name: "Comic Press",
     blurb: "Halftone dots, speed lines and inked panels. Newsprint by day, late-edition by night.",
     scene: "comic",
-    wordmark: { lead: "MCU", tail: "Quiz" },
+    wordmark: { lead: "MARVEL", tail: "Quiz" },
     intro: null,
     palette: {},            // the stylesheet's own values
     paletteDark: {},
@@ -67,9 +67,9 @@ export const BUILTIN_THEMES = [
     name: "Cosmic Gauntlet",
     blurb: "Deep space, drifting embers and a pulsing core, with a title card that assembles itself. The one for a big screen.",
     scene: "cosmic",
-    wordmark: { lead: "MCU", tail: "Quiz" },
+    wordmark: { lead: "MARVEL", tail: "Quiz" },
     intro: {
-      title: "MCU QUIZ",
+      title: "MARVEL QUIZ",
       subtitle: "Six guesses each. The clock is running.",
       everyMs: 14000,
     },
@@ -100,7 +100,7 @@ function validateTheme(raw, id) {
     blurb: String(t.blurb || "").slice(0, 160),
     scene: String(t.scene || "hud").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32),
     wordmark: {
-      lead: String(t.wordmark?.lead ?? "MCU").slice(0, 14),
+      lead: String(t.wordmark?.lead ?? "MARVEL").slice(0, 14),
       tail: String(t.wordmark?.tail ?? "Quiz").slice(0, 18),
     },
     intro: null,

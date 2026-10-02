@@ -136,7 +136,7 @@
    */
   function emblem(size = 34) {
     const id = "em" + Math.random().toString(36).slice(2, 8);
-    return `<svg class="art-emblem" width="${size}" height="${size}" viewBox="0 0 48 48" role="img" aria-label="MCU Quiz badge">
+    return `<svg class="art-emblem" width="${size}" height="${size}" viewBox="0 0 48 48" role="img" aria-label="Marvel Quiz badge">
       <defs>
         <pattern id="${id}" width="4" height="4" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="currentColor" opacity=".45"></circle>

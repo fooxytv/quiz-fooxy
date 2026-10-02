@@ -19,6 +19,9 @@
   let stopScene = null;
   let sceneWanted = false;
   let introTimer = 0;
+  /* The title card covers the page, so it never plays by itself. The host
+     triggers it, and may opt into a loop for an unattended lobby screen. */
+  let introLoop = false;
 
   const el = (id) => document.getElementById(id);
   const prefersDark = () =>
@@ -44,7 +47,7 @@
   function applyWordmark(theme) {
     const lead = document.querySelector(".wordmark .a");
     const tail = document.querySelector(".wordmark .b");
-    if (lead) lead.textContent = theme.wordmark?.lead ?? "MCU";
+    if (lead) lead.textContent = theme.wordmark?.lead ?? "MARVEL";
     if (tail) tail.textContent = theme.wordmark?.tail ?? "Quiz";
   }
 
@@ -80,7 +83,7 @@
     document.body.classList.toggle("art-on", sceneWanted);
     if (sceneWanted) {
       startScene();
-      scheduleIntro();
+      if (introLoop) scheduleIntro();
     } else {
       stop();
       clearTimeout(introTimer);
@@ -97,7 +100,7 @@
    * is up, the way an intro used to sit looping on a landing page.
    */
   function playIntro() {
-    if (!current?.intro || !sceneWanted) return;
+    if (!current?.intro) return;
     const host = el("introCard");
     if (!host) return;
     if (window.ComicArt?.reduced?.()) {
@@ -132,10 +135,22 @@
 
   function scheduleIntro() {
     clearTimeout(introTimer);
-    if (!current?.intro || !sceneWanted) { hideIntro(); return; }
+    if (!current?.intro || !sceneWanted || !introLoop) { hideIntro(); return; }
     playIntro();
     introTimer = setTimeout(scheduleIntro, current.intro.everyMs);
   }
+
+  /** Looping is opt-in, and remembered per device. */
+  function setIntroLoop(on) {
+    introLoop = !!on;
+    try { localStorage.setItem("mcuQuiz.introLoop", introLoop ? "1" : "0"); } catch (e) {}
+    if (introLoop) scheduleIntro();
+    else { clearTimeout(introTimer); introTimer = 0; hideIntro(); }
+    return introLoop;
+  }
+  function introLooping() { return introLoop; }
+  function hasIntro() { return !!current?.intro; }
+  try { introLoop = localStorage.getItem("mcuQuiz.introLoop") === "1"; } catch (e) {}
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
@@ -152,7 +167,7 @@
     applyWordmark(theme);
     if (sceneWanted && changed) {
       startScene();
-      scheduleIntro();
+      if (introLoop) scheduleIntro();
     }
   }
 
@@ -173,5 +188,9 @@
     });
   }
 
-  window.Theme = { apply, load, setBackdrop, playIntro, get current() { return current; } };
+  window.Theme = {
+    apply, load, setBackdrop, playIntro, hideIntro,
+    setIntroLoop, introLooping, hasIntro,
+    get current() { return current; },
+  };
 })();

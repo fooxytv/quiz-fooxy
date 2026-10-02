@@ -413,13 +413,17 @@ app.post("/api/admin/count", requireAdmin, (req, res) => {
 app.post("/api/admin/reset", requireAdmin, (req, res) => {
   const old = store.activeRound();
   store.wipeRound(old.id);
+  /* A reset is a clean slate: the removed list goes too, so last session's
+     ejections do not haunt the next one. Removing someone still sticks for the
+     rest of the round they were removed from. */
+  store.clearBlocklist();
   const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count);
   /* Everyone is out, not merely cleared: every page returns to the join screen
-     and has to opt back in. Removals are deliberately NOT lifted. */
+     and has to opt back in. */
   broadcastAll({ type: "ejected", round: fresh.id });
   broadcastRound();
   broadcastBoard();
-  res.json({ ok: true, round: fresh.id, blockedKept: store.blockedPlayers().length });
+  res.json({ ok: true, round: fresh.id, blocked: store.blockedPlayers().length });
 });
 
 app.post("/api/admin/kick", requireAdmin, (req, res) => {
@@ -439,6 +443,14 @@ app.post("/api/admin/unkick", requireAdmin, (req, res) => {
   notifyPlayer(id, { type: "reinstated" });
   broadcastBoard();
   res.json({ ok: true });
+});
+
+app.post("/api/admin/clear-removed", requireAdmin, (req, res) => {
+  const had = store.blockedPlayers().length;
+  store.clearBlocklist();
+  broadcastAll({ type: "reinstated" });
+  broadcastBoard();
+  res.json({ ok: true, cleared: had });
 });
 
 app.get("/api/admin/themes", requireAdmin, (req, res) => {

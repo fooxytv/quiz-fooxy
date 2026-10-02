@@ -276,6 +276,13 @@ export function unblockPlayer(id) {
   });
 }
 
+export function clearBlocklist() {
+  tx(() => {
+    db.prepare("DELETE FROM blocklist").run();
+    db.prepare("UPDATE players SET blocked = 0").run();
+  });
+}
+
 export function blockedPlayers() {
   return db.prepare(`
     SELECT b.player_id AS id, b.blocked_at, COALESCE(b.name, p.name) AS name

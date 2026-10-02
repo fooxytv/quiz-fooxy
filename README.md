@@ -1,4 +1,4 @@
-# MCU Quiz
+# Marvel Quiz
 
 A Wordle-style superhero-film quiz built for a team sprint review. People scan a
 QR code, wait in a lobby, and the host counts everyone in together. Six guesses
@@ -72,7 +72,7 @@ A reset puts everybody back in the lobby, ready to run it again.
 The look is swappable from the host screen, live, without reloading anyone's page
 or disturbing a round. Three ship built in:
 
-- **Tactical Readout** — the default, and the one that fits a film quiz best:
+- **Tactical Readout** — the default, and the best fit for a film quiz:
   counter-rotating instrument rings over a receding floor grid, a scan sweep,
   corner brackets, square corners and cyan rules. Steel and cyan, built for a
   projector.
@@ -81,8 +81,10 @@ or disturbing a round. Three ship built in:
 - **Comic Press** — halftone dots, speed lines and inked panels on newsprint. The
   light-room option.
 
-The two dark themes carry a looping title card whose letters drop in one at a
-time.
+The two dark themes carry a title card whose letters drop in one at a time. It
+covers the screen, so it **never plays by itself**: the host presses *Play title
+card*, or switches *Loop it* on for an unattended lobby screen. It is never shown
+on a player's device, where it would sit over the game.
 
 A theme is a palette, a wordmark, a background scene and an optional intro card.
 Drop a JSON file into the data volume at `themes/` and it appears in the Themes
@@ -276,9 +278,10 @@ account.
    flips itself to the leaderboard so you can watch.
 7. **Remove** takes someone off the board; they can be let back in, keeping the
    run they had.
-8. **Reset and kick everyone** clears the board and throws every player out to
-   the join screen; each of them has to join again deliberately. Anyone you
-   removed **stays removed** — only *Let back in* undoes that.
+8. **Reset and kick everyone** is a clean slate: the board, the removed list and
+   everyone's session all go, and each player has to join again from scratch.
+   Within a round a removal sticks; *Let back in* or *Clear the list* undoes one
+   without resetting.
 
 Destructive buttons need two taps — no accidental mid-session wipe.
 
@@ -329,6 +332,7 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 | `POST /api/admin/limit` | `{limitMs}` |
 | `POST /api/admin/reset` | new round, board wiped |
 | `POST /api/admin/kick` / `unkick` | `{playerId}` |
+| `POST /api/admin/clear-removed` | empty the removed list without resetting |
 | `GET` / `PUT /api/admin/words` | read and replace the word list |
 | `GET /api/theme` | the active theme (public; every page needs it to paint) |
 | `GET /api/admin/themes` | every theme, and which is live |
@@ -341,9 +345,13 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 ./scripts/local.sh && ./scripts/local.sh test
 ```
 
+The suite drives a real server against the real local database, so it clears the
+removed list, resets the round and asserts it left nothing behind — no stray
+players, no removals, no half-finished round.
+
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-Ninety-two checks against a live server (`test/smoke.mjs`), driving two players at
+Ninety-six checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the

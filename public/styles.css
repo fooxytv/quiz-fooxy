@@ -448,3 +448,4 @@ body:not(.art-on) #introCard{display:none}
 }
 .tierbar i{font-style:normal;font-weight:900;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
 .seg button:disabled{opacity:.4;cursor:not-allowed}
+.introctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

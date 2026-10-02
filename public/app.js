@@ -542,6 +542,9 @@
   window.Sfx?.button($("soundBtn"), () => false);
 
   setStatus();
+  /* No title card on a player's device: it would cover the game they are playing.
+     It belongs on the host's projected screen only. */
+  window.Theme?.setIntroLoop?.(false);
   window.Theme?.load().then(() => render());
   refresh();
   connect();
