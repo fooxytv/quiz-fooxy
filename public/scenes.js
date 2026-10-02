@@ -77,49 +77,150 @@
 
   /* ============================================================== comic ==== */
 
-  /* The press look: drifting halftone and raking speed lines. */
+  /*
+   * A comic page coming off the press. Five things make it read as print rather
+   * than as "dots on a background":
+   *
+   *   1. Two halftone screens in different inks at different angles, the way
+   *      four-colour printing actually lays them down.
+   *   2. A deliberate misregistration -- the second screen sits a pixel or two
+   *      off -- which is the single strongest cue that something was printed.
+   *   3. Raking speed lines, the page's way of saying motion.
+   *   4. Ink burst outlines drifting across, the shape behind an impact.
+   *   5. Paper grain and edge darkening, so it looks scanned rather than drawn.
+   */
   function comic(canvas) {
+    let bursts = [], grain = [];
+
+    function seed(S) {
+      bursts = Array.from({ length: 3 }, (_, i) => ({
+        x: 0.2 + i * 0.3,
+        y: 0.25 + ((i * 0.37) % 0.5),
+        r: 0.1 + (i % 2) * 0.05,
+        spin: i * 1.1,
+        speed: 0.000045 + i * 0.000022,
+        spikes: 11 + i * 3,
+      }));
+      const n = Math.round(Math.min(260, Math.max(70, (S.w * S.h) / 9000)));
+      grain = Array.from({ length: n }, () => ({
+        x: Math.random(), y: Math.random(), a: 0.03 + Math.random() * 0.07,
+      }));
+    }
+
+    /*
+     * One halftone screen: dots on a lattice rotated by `angle`.
+     *
+     * The lattice indices are bounded by projecting the screen's corners back
+     * into lattice space. Iterating a square span over the diagonal instead
+     * (the obvious way) visits about ten times as many cells as it draws, and
+     * at 1080p that was 200k wasted iterations a frame across three screens.
+     */
+    function screenDots(ctx, w, h, t, angle, gap, colour, alpha, offx, offy, drift) {
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity;
+      for (const [px, py] of [[0, 0], [w, 0], [0, h], [w, h]]) {
+        const dx = px - w * 0.5 - offx, dy = py - h * 0.5 - offy;
+        const lx = dx * cos + dy * sin, ly = -dx * sin + dy * cos;
+        const i = (lx - drift) / gap, j = (ly - drift * 0.4) / gap;
+        if (i < i0) i0 = i;
+        if (i > i1) i1 = i;
+        if (j < j0) j0 = j;
+        if (j > j1) j1 = j;
+      }
+      i0 = Math.floor(i0) - 1; i1 = Math.ceil(i1) + 1;
+      j0 = Math.floor(j0) - 1; j1 = Math.ceil(j1) + 1;
+
+      ctx.fillStyle = colour;
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const lx = i * gap + drift;
+          const ly = j * gap + drift * 0.4;
+          const x = w * 0.5 + lx * cos - ly * sin + offx;
+          const y = h * 0.5 + lx * sin + ly * cos + offy;
+          if (x < -gap || x > w + gap || y < -gap || y > h + gap) continue;
+          const k = (x / Math.max(w, 1)) * 0.55 + (y / Math.max(h, 1)) * 0.45;
+          const pulse = 0.5 + 0.5 * Math.sin(t * 0.0007 + k * 5.5);
+          ctx.globalAlpha = alpha * (0.35 + k * 0.9);
+          ctx.beginPath();
+          ctx.arc(x, y, (0.55 + k * 1.9) * (0.78 + pulse * 0.22), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
     return makeScene(canvas, {
+      init: seed,
       draw(S) {
         const { ctx, w, h, t } = S;
-        const ink = token("--ink", "#17161A");
-        const red = token("--red", "#C8102E");
+        const ink = token("--ink", "#15120E");
+        const red = token("--red", "#D01E28");
+        const azure = token("--azure", "#1B64B8");
         ctx.clearRect(0, 0, w, h);
 
+        /* Raking speed lines, converging off the top-left corner. */
         ctx.save();
-        ctx.globalAlpha = 0.1;
+        ctx.globalAlpha = 0.09;
         ctx.strokeStyle = ink;
         ctx.lineWidth = 1.5;
-        const cx = -w * 0.25, cy = -h * 0.35;
-        for (let i = 0; i < 26; i++) {
-          const a = (i / 26) * Math.PI * 0.62 + 0.12 + Math.sin(t * 0.0003 + i) * 0.006;
-          const r0 = 120 + ((i * 37 + t * 0.035) % 260);
+        const cx = -w * 0.22, cy = -h * 0.3;
+        for (let i = 0; i < 24; i++) {
+          const a = (i / 24) * Math.PI * 0.6 + 0.14 + Math.sin(t * 0.0003 + i) * 0.006;
+          const r0 = 130 + ((i * 41 + t * 0.03) % 280);
           ctx.beginPath();
           ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
-          ctx.lineTo(cx + Math.cos(a) * (r0 + 170), cy + Math.sin(a) * (r0 + 170));
+          ctx.lineTo(cx + Math.cos(a) * (r0 + 190), cy + Math.sin(a) * (r0 + 190));
           ctx.stroke();
         }
         ctx.restore();
 
-        /* Dot spacing scales with the canvas so the op count stays bounded: a
-           fixed 16px grid is ~8.6k arcs a frame at 1080p and ~32k at 4K, which
-           drops frames on exactly the big screen this is meant for. */
-        const gap = Math.max(16, Math.sqrt((w * h) / 6000));
-        const drift = (t * 0.012) % gap;
+        /* Ink burst outlines, tumbling slowly. */
         ctx.save();
-        for (let y = -gap; y < h + gap; y += gap) {
-          for (let x = -gap; x < w + gap; x += gap) {
-            const px = x + drift, py = y + drift * 0.5;
-            const k = (px / Math.max(w, 1)) * 0.6 + (py / Math.max(h, 1)) * 0.4;
-            const pulse = 0.5 + 0.5 * Math.sin(t * 0.0008 + k * 6);
-            ctx.globalAlpha = 0.05 + k * 0.1;
-            ctx.fillStyle = k > 0.72 ? red : ink;
-            ctx.beginPath();
-            ctx.arc(px, py, 0.7 + k * 2.1 * (0.75 + pulse * 0.25), 0, Math.PI * 2);
-            ctx.fill();
+        ctx.globalAlpha = 0.11;
+        ctx.strokeStyle = red;
+        ctx.lineWidth = 2;
+        for (const b of bursts) {
+          const bx = b.x * w, by = b.y * h, br = b.r * Math.min(w, h);
+          const rot = b.spin + t * b.speed;
+          ctx.beginPath();
+          for (let i = 0; i <= b.spikes * 2; i++) {
+            const a = rot + (i / (b.spikes * 2)) * Math.PI * 2;
+            const r = i % 2 === 0 ? br : br * 0.52;
+            const px = bx + Math.cos(a) * r, py = by + Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
           }
+          ctx.closePath();
+          ctx.stroke();
         }
         ctx.restore();
+
+        /* Two screens, two angles, deliberately out of register. */
+        /* Budget is for all three screens together, not each. */
+        const gap = Math.max(16, Math.sqrt((w * h) / 2200));
+        const drift = (t * 0.011) % gap;
+        const slip = 1.6 + Math.sin(t * 0.0004) * 0.9;
+        ctx.save();
+        screenDots(ctx, w, h, t, 0.26, gap, ink, 0.1, 0, 0, drift);
+        screenDots(ctx, w, h, t, 1.31, gap * 1.15, red, 0.075, slip, -slip, drift * 0.8);
+        screenDots(ctx, w, h, t, 0.79, gap * 1.45, azure, 0.045, -slip, slip * 0.6, drift * 1.3);
+        ctx.restore();
+
+        /* Paper grain. */
+        ctx.save();
+        ctx.fillStyle = ink;
+        for (const g of grain) {
+          ctx.globalAlpha = g.a;
+          ctx.fillRect(g.x * w, g.y * h, 1, 1);
+        }
+        ctx.restore();
+
+        /* Edge darkening, like a page scanned slightly off the glass. */
+        const vig = ctx.createRadialGradient(w * 0.48, h * 0.46, Math.min(w, h) * 0.38,
+          w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
+        vig.addColorStop(0, "rgba(0,0,0,0)");
+        vig.addColorStop(1, "rgba(0,0,0,0.3)");
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, w, h);
       },
     });
   }

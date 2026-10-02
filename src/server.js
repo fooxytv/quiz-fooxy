@@ -30,7 +30,7 @@ app.disable("x-powered-by");
 const THEME_KEY = "theme";
 
 function activeTheme() {
-  return findTheme(store.DATA_DIR, store.getSetting(THEME_KEY, "hud"));
+  return findTheme(store.DATA_DIR, store.getSetting(THEME_KEY, "comic"));
 }
 
 /* ---------------------------------------------------------------- players ---- */

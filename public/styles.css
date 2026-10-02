@@ -449,3 +449,46 @@ body:not(.art-on) #introCard{display:none}
 .tierbar i{font-style:normal;font-weight:900;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
 .seg button:disabled{opacity:.4;cursor:not-allowed}
 .introctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* ---------- comic press: heavier ink, printed lettering ---------- */
+:root[data-scene="comic"] .panel,
+:root[data-scene="comic"] .qrcard,
+:root[data-scene="comic"] .howto,
+:root[data-scene="comic"] .gostrip,
+:root[data-scene="comic"] .settings,
+:root[data-scene="comic"] .table-scroll{
+  border-width:3px;box-shadow:6px 6px 0 var(--panel-shadow);
+}
+:root[data-scene="comic"] .tile{border-width:3px}
+:root[data-scene="comic"] .key{border-width:2.5px}
+:root[data-scene="comic"] .btn{border-width:3px;box-shadow:3px 3px 0 var(--panel-shadow)}
+:root[data-scene="comic"] .btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--panel-shadow)}
+:root[data-scene="comic"] .counter,
+:root[data-scene="comic"] .answer-shout{
+  -webkit-text-stroke:0;
+  text-shadow:2px 2px 0 color-mix(in srgb,var(--ink) 22%,transparent);
+}
+/* Printed title lettering: filled letters with a hard ink edge and drop. */
+:root[data-scene="comic"] .intro-title .ch{
+  color:var(--gold);
+  -webkit-text-stroke:3px var(--ink);
+  paint-order:stroke fill;
+  text-shadow:6px 6px 0 var(--red);
+}
+:root[data-scene="comic"] .intro-sub{
+  color:var(--ink);
+  background:var(--gold);
+  border:3px solid var(--ink);
+  padding:4px 14px;
+  box-shadow:4px 4px 0 var(--ink);
+  letter-spacing:.2em;
+}
+@media (max-width:480px){
+  :root[data-scene="comic"] .panel,
+  :root[data-scene="comic"] .qrcard,
+  :root[data-scene="comic"] .howto,
+  :root[data-scene="comic"] .gostrip,
+  :root[data-scene="comic"] .settings,
+  :root[data-scene="comic"] .table-scroll{box-shadow:4px 4px 0 var(--panel-shadow)}
+  :root[data-scene="comic"] .intro-title .ch{-webkit-text-stroke:2px var(--ink);text-shadow:4px 4px 0 var(--red)}
+}

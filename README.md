@@ -30,8 +30,9 @@ Two things are deliberately kept out of the browser:
 
 ## How a session runs
 
-A pool of 100 words in six tiers — **warm up, easy, steady, tricky, hard,
-brutal** — and the host picks how many questions a round runs to (5, 10, 15, 20,
+A pool of 126 words in six tiers — **warm up, easy, steady, tricky, hard,
+brutal** — MCU, X-Men, and the deep Secret Wars and Battleworld corners — and the host
+picks how many questions a round runs to (5, 10, 15, 20,
 25 or 30). Answers are 3 to 12 letters; the grid tightens its spacing and type to
 fit even SVARTALFHEIM on a phone.
 
@@ -47,9 +48,9 @@ The host screen prints the real figure for the chosen length:
 
 | round length | words two players share | |
 |---|---|---|
-| 10 | ~1.2 | 12% of the round |
-| 20 | ~4.1 | 21% |
-| 30 | ~9.4 | 31% |
+| 10 | ~0.9 | 9% of the round |
+| 20 | ~3.4 | 17% |
+| 30 | ~7.6 | 25% |
 
 Shorter rounds are more distinct, and adding words to the thin tiers helps most —
 the host panel shows the depth of each. What matters for copying is that the word
@@ -72,16 +73,20 @@ A reset puts everybody back in the lobby, ready to run it again.
 The look is swappable from the host screen, live, without reloading anyone's page
 or disturbing a round. Three ship built in:
 
-- **Tactical Readout** — the default, and the best fit for a film quiz:
-  counter-rotating instrument rings over a receding floor grid, a scan sweep,
-  corner brackets, square corners and cyan rules. Steel and cyan, built for a
-  projector.
+- **Comic Press** — the default. A page coming off the press: three ink screens
+  at different angles, deliberately **out of register**, which is the strongest
+  cue that something was printed rather than drawn. Speed lines, drifting ink
+  burst outlines, paper grain and scanned-page edge darkening, over a proper
+  newsprint palette with a late-edition dark variant. Panels get heavier borders,
+  buttons press into the page, and the title card is printed lettering — gold
+  fill, hard ink edge, red drop.
+- **Tactical Readout** — the briefing-screen look: counter-rotating instrument
+  rings over a receding floor grid, a scan sweep and corner brackets, in steel
+  and cyan.
 - **Cosmic Gauntlet** — deep space with a nebula wash, parallax starfield, rising
   embers and a pulsing core. Panels on frosted glass.
-- **Comic Press** — halftone dots, speed lines and inked panels on newsprint. The
-  light-room option.
 
-The two dark themes carry a title card whose letters drop in one at a time. It
+Each theme carries a title card whose letters drop in one at a time. It
 covers the screen, so it **never plays by itself**: the host presses *Play title
 card*, or switches *Loop it* on for an unattended lobby screen. It is never shown
 on a player's device, where it would sit over the game.
@@ -107,7 +112,10 @@ nothing is sampled, traced or transcribed from anyone's property.
   `prefers-reduced-motion`. Dot spacing scales with the canvas so the per-frame
   draw count stays near 6,500 at any resolution — a fixed grid was ~8,600 ops a
   frame at 1080p and ~32,000 at 4K, which drops frames on exactly the big screen
-  this is for.
+  this is for. The press scene draws three colour screens inside that same budget
+  by projecting the viewport's corners back into each rotated lattice to bound
+  the loop — iterating a square span over the diagonal instead visited about ten
+  times as many cells as it drew.
 - `public/art.js` draws the hexagonal badge, the ink starbursts behind the
   countdown, and the burst that pops when a word falls.
 - `public/theme.js` applies a theme and runs the looping title card.
@@ -347,11 +355,12 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 
 The suite drives a real server against the real local database, so it clears the
 removed list, resets the round and asserts it left nothing behind — no stray
-players, no removals, no half-finished round.
+players, no removals, no half-finished round. That cleanup runs even if a check
+throws, which is how residue got left the first time.
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-Ninety-six checks against a live server (`test/smoke.mjs`), driving two players at
+Ninety-nine checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the

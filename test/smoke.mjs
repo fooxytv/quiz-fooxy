@@ -22,8 +22,11 @@ const ok = (label, cond, extra = "") => console.log(`${cond ? "PASS" : "FAIL"}  
 let failures = 0;
 const check = (l, c, e) => { if (!c) failures++; ok(l, c, e); };
 
+let r;
+try {
+
 // health
-let r = await call("/healthz");
+r = await call("/healthz");
 check("healthz responds", r.status === 200 && r.data.ok);
 
 /* The suite assumes a clean lobby, so it makes one. This also means it can be
@@ -93,7 +96,7 @@ check("wrong length rejected", r.status === 400 && r.data.error === "bad_length"
 
 // a wrong guess of the right length
 const len = s0.current.length;
-const wrong = "ZZZZZZZZ".slice(0, len);
+const wrong = "Z".repeat(len);   // answers run to 12 letters, so never hardcode this
 r = await call("/api/guess", "POST", { guess: wrong });
 check("wrong guess accepted and marked", r.status === 200 && r.data.current.rows.length === 1
   && r.data.current.rows[0].marks.length === len);
@@ -314,11 +317,17 @@ if (victim) {
 }
 as("me");
 
+} catch (e) {
+  /* A thrown error used to skip the cleanup below, which is how residue got left
+     in the first place. Record it as a failure and fall through. */
+  check("suite ran to completion without throwing", false, `${e && e.message}`);
+}
+
 /*
- * Tidy up. This suite drives a real server against a real database -- the local
- * Docker stack shares its volume with actual play -- so it must not leave players,
- * removals or a half-finished round behind. It previously left a blocked player
- * called "Rival" sitting in the host's removed list for good.
+ * Tidy up, whatever happened above. This suite drives a real server against a
+ * real database -- the local Docker stack shares its volume with actual play --
+ * so it must not leave players, removals or a half-finished round behind. It
+ * previously left a blocked player called "Rival" in the removed list for good.
  */
 try {
   as("me");

@@ -41,7 +41,7 @@
       if (!PALETTE_KEYS.includes(k) || !HEX.test(String(v))) continue;
       root.style.setProperty("--" + k, v);
     }
-    root.setAttribute("data-scene", theme.scene || "hud");
+    root.setAttribute("data-scene", theme.scene || "comic");
   }
 
   function applyWordmark(theme) {
@@ -58,7 +58,7 @@
     if (!canvas || !current) return;
     stopScene?.();
     stopScene = null;
-    const make = window.Scenes?.[current.scene] || window.Scenes?.hud;
+    const make = window.Scenes?.[current.scene] || window.Scenes?.comic;
     if (make) stopScene = make(canvas);
     if (current.backdropImage) {
       canvas.style.backgroundImage = `url("/assets/${encodeURIComponent(current.backdropImage)}")`;
