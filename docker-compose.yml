@@ -22,7 +22,12 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: marvel-quiz-tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    # The token goes in the environment, not the command line: a command-line
+    # token is visible to anyone who can run `docker ps` or read /proc.
+    # `:?` makes compose refuse to start rather than launching a tokenless tunnel.
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env - see .env.example}"
     depends_on:
       quiz:
         condition: service_healthy

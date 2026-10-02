@@ -223,9 +223,23 @@ Verified, on the real image:
 
 ```bash
 git clone https://github.com/fooxytv/quiz-fooxy.git && cd quiz-fooxy
-cp .env.example .env     # then fill in the Cloudflare values
+cp .env.example .env     # then fill in the four required values
 ./scripts/deploy.sh
 ```
+
+`.env` needs four things filled in, and `deploy.sh` checks each before it builds:
+
+| | |
+|---|---|
+| `TUNNEL_TOKEN` | **Hard stop if missing.** Without it nothing can reach the quiz. |
+| `PUBLIC_URL` | The hostname you mapped, exactly as a phone should open it — this is what the QR encodes. |
+| `CF_ACCESS_TEAM_DOMAIN` | Warns and pauses if missing: players can play but **you** get 403 on `/admin`. |
+| `CF_ACCESS_AUD` | Same. |
+
+It then validates the compose file, builds with `--pull`, waits for the container
+to report healthy, **checks the tunnel container is running and has registered a
+connection**, and prints the build it just deployed. Any of those failing exits
+non-zero with the relevant logs rather than claiming success.
 
 `deploy.sh` builds the image, brings the stack up, waits for the container to
 report healthy, and prints the player and host URLs. If the build fails or the
@@ -302,7 +316,9 @@ token into `TUNNEL_TOKEN` in `.env`, and add a public hostname:
 | Service | `http://quiz:3000` |
 
 `quiz` is the compose service name, so the tunnel reaches it over the compose
-network. The app publishes no ports to the host.
+network. The app publishes no ports to the host, so the tunnel is the only route
+in. The token is passed to `cloudflared` through the environment rather than the
+command line, so it is not visible to anyone who can run `docker ps`.
 
 **2. Access policy on the admin portal.** In Zero Trust → Access →
 Applications, add a self-hosted application:

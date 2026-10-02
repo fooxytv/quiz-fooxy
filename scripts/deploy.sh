@@ -10,16 +10,27 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Without a tunnel token nothing can reach the quiz, so stop rather than start a
+# stack that looks healthy and is unreachable.
+if ! grep -qE '^TUNNEL_TOKEN=.+' .env; then
+  echo "!! TUNNEL_TOKEN is empty in .env. Nothing could reach the quiz." >&2
+  echo "   Zero Trust > Networks > Tunnels > your tunnel > Install and run a connector," >&2
+  echo "   and copy the token out of the command it shows you." >&2
+  exit 1
+fi
+
 # Warn about placeholders rather than deploying a half-configured admin portal.
 missing=()
 grep -q '^CF_ACCESS_AUD=.\+'                  .env || missing+=("CF_ACCESS_AUD")
 grep -q '^CF_ACCESS_TEAM_DOMAIN=.\+'          .env || missing+=("CF_ACCESS_TEAM_DOMAIN")
 grep -qE '^CF_ACCESS_TEAM_DOMAIN=yourteam\.'  .env && missing+=("CF_ACCESS_TEAM_DOMAIN (still the placeholder)")
 if (( ${#missing[@]} )); then
-  echo "!! The admin portal will refuse every request until these are set in .env:" >&2
+  echo "!! Cloudflare Access is not configured:" >&2
   printf '     - %s\n' "${missing[@]}" >&2
-  echo "   Players can still play. Continuing in 5s; Ctrl-C to stop." >&2
-  sleep 5
+  echo "   Players can still play, but YOU will get 403 on /admin and will not be" >&2
+  echo "   able to open the leaderboard or start a round." >&2
+  echo "   Continuing in 8s; Ctrl-C to stop and finish the Access setup first." >&2
+  sleep 8
 fi
 
 # These belong to local testing only. Refuse rather than warn: a deploy that
@@ -35,6 +46,12 @@ done
 
 COMPOSE=(docker compose)
 docker compose version >/dev/null 2>&1 || COMPOSE=(docker-compose)
+
+echo "==> Validating the compose file and .env"
+if ! "${COMPOSE[@]}" config -q; then
+  echo "!! The compose file or .env could not be resolved. Nothing was built." >&2
+  exit 1
+fi
 
 echo "==> Building"
 BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
@@ -66,6 +83,22 @@ if [[ "${status:-}" != "healthy" ]]; then
   exit 1
 fi
 
+# A healthy app behind a dead tunnel is still an unreachable site.
+echo "==> Checking the tunnel"
+tname="$("${COMPOSE[@]}" ps -q tunnel || true)"
+tstate="$([[ -n "$tname" ]] && docker inspect -f '{{.State.Status}}' "$tname" 2>/dev/null || echo missing)"
+if [[ "$tstate" != "running" ]]; then
+  echo "!! The tunnel container is ${tstate}. The quiz is up but unreachable." >&2
+  "${COMPOSE[@]}" logs --tail 30 tunnel >&2 || true
+  exit 1
+fi
+if "${COMPOSE[@]}" logs --tail 50 tunnel 2>&1 | grep -qiE 'Registered tunnel connection|Connection .* registered'; then
+  echo "    tunnel connected"
+else
+  echo "    tunnel running, but no registered connection in the last 50 log lines yet."
+  echo "    Give it a few seconds, then: ./scripts/logs.sh tunnel"
+fi
+
 PUBLIC_URL="$(grep -E '^PUBLIC_URL=' .env | cut -d= -f2- || true)"
 echo
 echo "==> Up"
@@ -74,4 +107,7 @@ echo
 echo "    Players  ${PUBLIC_URL:-http://localhost:3000}"
 echo "    Host     ${PUBLIC_URL:-http://localhost:3000}/admin"
 echo
-echo "Logs:  ./scripts/logs.sh      Stop:  docker compose down"
+echo "    build    $(docker exec "$name" printenv BUILD_SHA 2>/dev/null || echo unknown)  (compare with: git rev-parse --short HEAD)"
+echo
+echo "Logs:  ./scripts/logs.sh          Tunnel logs:  ./scripts/logs.sh tunnel"
+echo "Stop:  docker compose down        Backup:       ./scripts/backup.sh"
