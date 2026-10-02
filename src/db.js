@@ -58,6 +58,10 @@ db.exec(`
     ms         INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, puzzle_idx)
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS blocklist (
     player_id  TEXT PRIMARY KEY,
     blocked_at INTEGER NOT NULL,
@@ -99,6 +103,18 @@ export function loadPuzzles() {
 export function savePuzzles(list) {
   fs.writeFileSync(WORDS_PATH, JSON.stringify(list, null, 2));
   puzzleCache = list;
+}
+
+/* ---------- settings: small key/value state that outlives a round ---------- */
+
+export function getSetting(key, fallback = null) {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return row ? row.value : fallback;
+}
+
+export function setSetting(key, value) {
+  db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .run(key, String(value));
 }
 
 /* ---------- rounds ---------- */

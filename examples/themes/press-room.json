@@ -1,0 +1,32 @@
+{
+  "id": "press-room",
+  "name": "Press Room",
+  "blurb": "The comic scene on warm newsprint with a single red accent. Quiet enough for a daytime slot.",
+  "scene": "comic",
+  "wordmark": { "lead": "SIX", "tail": "Panels" },
+  "palette": {
+    "paper": "#EFEBE2",
+    "surface": "#FFFDF8",
+    "sunk": "#E4DFD4",
+    "ink": "#1A1714",
+    "muted": "#6E655A",
+    "hair": "#CEC7B8",
+    "red": "#B5121B",
+    "gold": "#C98A12",
+    "green": "#1E6E45",
+    "azure": "#2A4A8C",
+    "tile-edge": "#C3BCAD",
+    "on-solid": "#FFFDF8",
+    "panel-shadow": "#1A1714"
+  },
+  "paletteDark": {
+    "paper": "#14120F",
+    "surface": "#1E1B16",
+    "sunk": "#17150F",
+    "ink": "#F0EADC",
+    "muted": "#9C9183",
+    "hair": "#332E25",
+    "panel-shadow": "#000000",
+    "on-solid": "#14120F"
+  }
+}

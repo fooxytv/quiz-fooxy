@@ -166,6 +166,30 @@ const rivalRow = r.data.players.find((p) => p.name === "Rival");
 check("on-time player is not flagged late", rivalRow && rivalRow.late === false);
 as("me");
 
+// ---- themes ---------------------------------------------------------------
+r = await call("/api/theme");
+check("active theme is public", r.status === 200 && !!r.data.theme && !!r.data.theme.id);
+const firstTheme = r.data.theme.id;
+check("theme carries a scene and a wordmark",
+  !!r.data.theme.scene && !!r.data.theme.wordmark.lead, `scene=${r.data.theme.scene}`);
+check("theme palette is hex only",
+  Object.values(r.data.theme.palette || {}).every((v) => /^#[0-9a-f]{3,8}$/i.test(v)));
+
+r = await call("/api/admin/themes");
+check("theme list for the host", r.status === 200 && r.data.themes.length >= 2,
+  `themes=${(r.data.themes || []).map((t) => t.id).join(",")}`);
+const other = r.data.themes.map((t) => t.id).find((id) => id !== firstTheme);
+r = await call("/api/admin/theme", "POST", { id: other });
+check("theme switch accepted", r.data.ok === true && r.data.theme.id === other);
+r = await call("/api/theme");
+check("switch is visible to players", r.data.theme.id === other);
+r = await call("/api/admin/theme", "POST", { id: "no-such-theme" });
+check("unknown theme refused", r.status === 400 && r.data.error === "unknown_theme");
+r = await call("/api/admin/theme", "POST", { id: firstTheme });
+check("theme switched back", r.data.ok === true);
+r = await call("/assets/../src/server.js");
+check("asset route refuses path traversal", r.status === 404, `status=${r.status}`);
+
 // ---- word list validation
 r = await call("/api/admin/words", "PUT", { puzzles: [{ answer: "XX", hint: "too short" }] });
 check("bad word list refused", r.status === 400, r.data?.message);

@@ -339,3 +339,90 @@ body.art-on #backdrop{opacity:1}
 .tier.tSTEADY{background:var(--azure)}
 .tier.tTRICKY{background:var(--gold)}
 .tier.tHARD{background:var(--red)}
+
+/* ---------- themed backdrop ---------- */
+#backdrop.has-image{background-size:cover;background-position:center}
+
+/* The cosmic theme sits content on glass so the scene reads through it. */
+:root[data-scene="cosmic"] .panel,
+:root[data-scene="cosmic"] .qrcard,
+:root[data-scene="cosmic"] .howto,
+:root[data-scene="cosmic"] .gostrip,
+:root[data-scene="cosmic"] .settings,
+:root[data-scene="cosmic"] .table-scroll,
+:root[data-scene="cosmic"] .pod{
+  background:color-mix(in srgb,var(--surface) 82%,transparent);
+  backdrop-filter:blur(9px);
+  -webkit-backdrop-filter:blur(9px);
+}
+:root[data-scene="cosmic"] .topbar{
+  background:color-mix(in srgb,var(--paper) 72%,transparent);
+  backdrop-filter:blur(11px);
+  -webkit-backdrop-filter:blur(11px);
+  background-image:none;
+}
+:root[data-scene="cosmic"] .halftone{background-image:none}
+:root[data-scene="cosmic"] .tile{background:color-mix(in srgb,var(--surface) 70%,transparent)}
+:root[data-scene="cosmic"] .key{background:color-mix(in srgb,var(--surface) 76%,transparent)}
+:root[data-scene="cosmic"] .wordmark .a{text-shadow:0 0 18px color-mix(in srgb,var(--red) 70%,transparent)}
+
+/* ---------- intro title card ---------- */
+#introCard{
+  position:fixed;inset:0;z-index:2;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;padding:0 16px;text-align:center;
+  opacity:0;transition:opacity .7s ease;
+}
+#introCard.on{opacity:1}
+body:not(.art-on) #introCard{display:none}
+.intro-title{
+  font-family:"Big Shoulders Display",sans-serif;font-weight:800;
+  font-size:clamp(46px,13vw,170px);line-height:.86;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--ink);
+  display:flex;flex-wrap:wrap;justify-content:center;
+}
+.intro-title .sp{width:.34em}
+.intro-title .ch{
+  display:inline-block;opacity:0;
+  text-shadow:0 0 30px color-mix(in srgb,var(--azure) 60%,transparent);
+}
+#introCard.on .intro-title .ch{animation:dropIn .62s cubic-bezier(.16,1.02,.3,1) both}
+@keyframes dropIn{
+  0%{opacity:0;transform:translateY(-.42em) scale(1.5) rotate(-5deg);filter:blur(7px)}
+  62%{opacity:1;transform:translateY(0) scale(1) rotate(0deg);filter:blur(0)}
+  76%{transform:translateY(.04em) scale(.985)}
+  100%{opacity:1;transform:none}
+}
+.intro-sub{
+  font-family:"Chivo",sans-serif;font-weight:700;font-size:clamp(12px,2.4vw,19px);
+  letter-spacing:.3em;text-transform:uppercase;color:var(--muted);
+  opacity:0;overflow:hidden;white-space:nowrap;max-width:100%;
+}
+#introCard.on .intro-sub{animation:wipeIn .9s ease-out both}
+@keyframes wipeIn{
+  0%{opacity:0;clip-path:inset(0 100% 0 0)}
+  100%{opacity:1;clip-path:inset(0 0 0 0)}
+}
+@media (prefers-reduced-motion:reduce){
+  #introCard .ch,#introCard .intro-sub{animation:none!important;opacity:1!important}
+}
+
+/* ---------- theme picker ---------- */
+.themegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:12px}
+.themecard{
+  text-align:left;cursor:pointer;touch-action:manipulation;
+  border:2px solid var(--ink);border-radius:3px;background:var(--surface);
+  padding:13px 14px;font:inherit;color:var(--ink);
+}
+.themecard[aria-pressed="true"]{box-shadow:4px 4px 0 var(--panel-shadow);border-color:var(--red)}
+.themecard h5{
+  font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:20px;
+  letter-spacing:.04em;text-transform:uppercase;margin:0 0 4px;
+}
+.themecard p{margin:0;font-size:12.5px;line-height:1.45;color:var(--muted)}
+.themecard .swatches{display:flex;gap:4px;margin-top:10px}
+.themecard .swatches i{width:17px;height:17px;border-radius:2px;border:1.5px solid var(--hair);display:block}
+.themecard .live{
+  display:inline-block;font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;
+  background:var(--red);color:#FFF;border-radius:2px;padding:1px 5px;margin-left:6px;vertical-align:2px;
+}

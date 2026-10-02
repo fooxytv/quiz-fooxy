@@ -10,6 +10,7 @@ import { MAX_TRIES, clientMeta, validatePuzzles } from "./words.js";
 import { mark, resultCode, rowMs, compareEntries } from "./game.js";
 import { requireAdmin, verifyAdmin, parseCookies, accessConfigured, insecureLocal, devBypass } from "./auth.js";
 import * as store from "./db.js";
+import { loadThemes, findTheme, reloadThemes } from "./themes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -23,6 +24,14 @@ const app = express();
 app.set("trust proxy", true);
 app.use(express.json({ limit: "64kb" }));
 app.disable("x-powered-by");
+
+/* ----------------------------------------------------------------- theme ---- */
+
+const THEME_KEY = "theme";
+
+function activeTheme() {
+  return findTheme(store.DATA_DIR, store.getSetting(THEME_KEY, "comic"));
+}
 
 /* ---------------------------------------------------------------- players ---- */
 
@@ -214,6 +223,10 @@ app.post("/api/join", (req, res) => {
   res.json(playerState(store.getPlayer(pid), round, puzzles));
 });
 
+app.get("/api/theme", (req, res) => {
+  res.set("Cache-Control", "no-store").json({ theme: activeTheme() });
+});
+
 app.get("/api/state", (req, res) => {
   const pid = readPid(req);
   const round = store.activeRound();
@@ -375,6 +388,23 @@ app.post("/api/admin/unkick", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/admin/themes", requireAdmin, (req, res) => {
+  reloadThemes();
+  res.json({ themes: loadThemes(store.DATA_DIR), active: activeTheme().id });
+});
+
+app.post("/api/admin/theme", requireAdmin, (req, res) => {
+  const id = String(req.body?.id || "");
+  reloadThemes();
+  const found = loadThemes(store.DATA_DIR).find((t) => t.id === id);
+  if (!found) return res.status(400).json({ error: "unknown_theme", message: "No theme with that id." });
+  store.setSetting(THEME_KEY, found.id);
+  /* Every open page re-themes itself without a reload. */
+  broadcastAll({ type: "theme", id: found.id });
+  for (const ws of adminSockets) send(ws, { type: "theme", id: found.id });
+  res.json({ ok: true, theme: found });
+});
+
 app.get("/api/admin/words", requireAdmin, (req, res) => {
   res.json({ puzzles: store.loadPuzzles() });
 });
@@ -403,6 +433,15 @@ app.get("/api/admin/qr.svg", requireAdmin, async (req, res) => {
 });
 
 /* ---------------------------------------------------------------- pages ----- */
+
+/* Files the operator dropped in DATA_DIR/assets. Name only: no path traversal. */
+app.get("/assets/:file", (req, res) => {
+  const name = String(req.params.file || "").replace(/[^A-Za-z0-9._-]/g, "");
+  if (!name || name === "." || name === "..") return res.status(404).end();
+  res.sendFile(path.join(store.DATA_DIR, "assets", name), { maxAge: "1h" }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
 
 app.get("/healthz", (req, res) => res.json({ ok: true, round: store.activeRound().id }));
 
@@ -535,6 +574,7 @@ server.listen(PORT, () => {
   console.log(`  public url   ${PUBLIC_URL}`);
   console.log(`  data dir     ${store.DATA_DIR}`);
   console.log(`  puzzles      ${store.loadPuzzles().length}`);
+  console.log(`  theme        ${activeTheme().id}  (${loadThemes(store.DATA_DIR).length} available)`);
   console.log(`  admin auth   ${authMode}`);
   if (insecureLocal) {
     console.log("");

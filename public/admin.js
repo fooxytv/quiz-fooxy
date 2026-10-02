@@ -18,7 +18,6 @@
   let connected = false;
   let words = null;
   let autoFlipped = false;   // jump to the leaderboard once, on the go
-  let stopArt = null;
   let lastTick = null;
   let wentOnce = false;      // the go sting fires exactly once per round
 
@@ -41,9 +40,7 @@
   /* The host screen is the one wired to the room's speakers, so this is where
      the lobby bed plays. Players' phones get effects only. */
   function setArt(on) {
-    document.body.classList.toggle("art-on", !!on);
-    if (on && !stopArt) stopArt = window.ComicArt?.backdrop(document.getElementById("backdrop")) || null;
-    if (!on && stopArt) { stopArt(); stopArt = null; }
+    window.Theme?.setBackdrop(!!on);
   }
   const inLobbyPhase = () => !!board && board.phase !== "running";
 
@@ -431,14 +428,67 @@
     };
   }
 
+  /* -------------------------------------------------------------- themes --- */
+
+  async function renderThemes() {
+    view.innerHTML = `<div class="panel panel-pad"><p class="meta" style="margin:0">Loading themes...</p></div>`;
+    let data;
+    try { data = await api("/api/admin/themes"); }
+    catch (e) {
+      view.innerHTML = `<div class="panel panel-pad"><p class="meta" style="margin:0;color:var(--red)">${esc(e.message)}</p></div>`;
+      return;
+    }
+
+    view.innerHTML = `
+      <div class="panel panel-pad">
+        <h2 style="font-size:27px">Themes</h2>
+        <p class="meta" style="margin:8px 0 0">Changes the look for everyone at once, straight away &mdash; no reload, and it does not disturb a round in progress. The backgrounds are drawn in code, so they cost nothing to ship and scale to any screen.</p>
+        <div class="themegrid">
+          ${data.themes.map((t) => `
+            <button class="themecard" type="button" data-theme="${esc(t.id)}" aria-pressed="${t.id === data.active}">
+              <h5>${esc(t.name)}${t.id === data.active ? `<span class="live">live</span>` : ""}</h5>
+              <p>${esc(t.blurb || "")}</p>
+              <div class="swatches">
+                ${["red", "gold", "green", "azure", "surface", "ink"].map((k) =>
+                  `<i style="background:${esc(t.palette[k] || "var(--" + k + ")")}"></i>`).join("")}
+              </div>
+            </button>`).join("")}
+        </div>
+        <div class="hr"></div>
+        <h4 style="font-size:17px;letter-spacing:.09em">Adding your own</h4>
+        <p class="meta" style="margin:8px 0 0">Drop a JSON file into the data volume at <code>themes/</code> and it appears here on the next visit to this tab &mdash; no rebuild. It takes an <code>id</code>, a <code>name</code>, a <code>scene</code> (<code>comic</code> or <code>cosmic</code>), a <code>wordmark</code>, an optional <code>intro</code>, and a <code>palette</code> of hex colours. A <code>backdropImage</code> naming a file you put in <code>assets/</code> is layered behind the scene.</p>
+        <p class="meta" style="margin:8px 0 0">The shipped scenes are original drawings, not anyone's footage. If you add artwork of your own, what you are entitled to use is your call.</p>
+        <p class="meta" id="themeMsg" style="margin:12px 0 0"></p>
+      </div>`;
+
+    view.querySelectorAll("[data-theme]").forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.theme;
+        if (b.getAttribute("aria-pressed") === "true") return;
+        view.querySelectorAll("[data-theme]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        try {
+          const out = await api("/api/admin/theme", { method: "POST", body: { id } });
+          window.Theme?.apply(out.theme);
+          const msg = $("themeMsg");
+          if (msg) { msg.textContent = `Switched to ${out.theme.name}. Every open page has changed.`; msg.style.color = "var(--green)"; }
+        } catch (e) {
+          const msg = $("themeMsg");
+          if (msg) { msg.textContent = e.message; msg.style.color = "var(--red)"; }
+        }
+      };
+    });
+  }
+
   /* ---------------------------------------------------------------- tabs --- */
 
   function paint() {
     $("tabLobby").setAttribute("aria-pressed", String(tab === "lobby"));
     $("tabBoard").setAttribute("aria-pressed", String(tab === "board"));
     $("tabWords").setAttribute("aria-pressed", String(tab === "words"));
+    $("tabThemes").setAttribute("aria-pressed", String(tab === "themes"));
     $("tabBoard").innerHTML = `Leaderboard${board && board.players.length ? ` <span class="countbadge">${board.players.length}</span>` : ""}`;
     if (tab === "words") return renderWords();
+    if (tab === "themes") return renderThemes();
     if (!board) {
       view.innerHTML = `<div class="panel panel-pad"><p class="meta" style="margin:0">Connecting…</p></div>`;
       return;
@@ -449,10 +499,11 @@
   $("tabLobby").onclick = () => { tab = "lobby"; paint(); };
   $("tabBoard").onclick = () => { tab = "board"; paint(); };
   $("tabWords").onclick = () => { tab = "words"; paint(); };
+  $("tabThemes").onclick = () => { tab = "themes"; paint(); };
 
   /* Patch only the time cells each second, so the QR never flickers. */
   setInterval(() => {
-    if (!board || tab === "words") return;
+    if (!board || tab === "words" || tab === "themes") return;
 
     document.querySelectorAll("[data-pid]").forEach((el) => {
       const p = board.players.find((x) => x.id === el.dataset.pid);
@@ -494,7 +545,7 @@
       wentOnce = false;
       lastTick = null;
     }
-    if (tab !== "words") paint();
+    if (tab !== "words" && tab !== "themes") paint();
   }
 
   function connect() {
@@ -506,6 +557,7 @@
     ws.onmessage = (ev) => {
       let msg = null;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === "theme") { window.Theme?.load(); return; }
       if (msg.type === "board") adopt(msg.board);
     };
   }
@@ -515,6 +567,7 @@
   window.Sfx?.button($("soundBtn"), inLobbyPhase);
 
   setStatus();
+  window.Theme?.load();
   paint();
   api("/api/admin/board").then(adopt).catch((e) => {
     view.innerHTML = `<div class="panel panel-pad"><h2 style="font-size:25px">Admin sealed</h2><p class="meta" style="margin:8px 0 0">${esc(e.message)}</p></div>`;

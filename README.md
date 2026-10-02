@@ -49,16 +49,42 @@ rather than wonder.
 
 A reset puts everybody back in the lobby, ready to run it again.
 
+## Themes
+
+The look is swappable from the host screen, live, without reloading anyone's page
+or disturbing a round. Two ship built in:
+
+- **Comic Press** — halftone dots, speed lines and inked panels. The default.
+- **Cosmic Gauntlet** — deep space with a nebula wash, parallax starfield, rising
+  embers and a pulsing core, panels on frosted glass, and a title card whose
+  letters drop in one by one and loop while the lobby is up. Built for a big
+  screen in a dim room.
+
+A theme is a palette, a wordmark, a background scene and an optional intro card.
+Drop a JSON file into the data volume at `themes/` and it appears in the Themes
+tab with no rebuild — see `examples/themes/` for two working files and the full
+field list. Palette values are restricted to a whitelist of tokens and accepted
+only as hex, so a theme cannot inject CSS; a bad one is logged and skipped rather
+than breaking the page.
+
+`backdropImage` names a file you put in the volume's `assets/` folder, layered
+behind the scene, if you want a still of your own back there.
+
 ## Artwork and music
 
 Everything is generated at run time; there are no media files in this repo and
 nothing is sampled, traced or transcribed from anyone's property.
 
-- `public/art.js` draws the backdrop on a canvas — drifting halftone dots and
-  raking speed lines — plus the hexagonal badge, ink starbursts behind the
-  countdown, and the burst that pops when a word falls. It reads its colours from
-  the CSS custom properties, so it follows both themes, and it holds still for
-  `prefers-reduced-motion`.
+- `public/scenes.js` holds the background scenes. Each caps device pixel ratio
+  at 2, scales its particle budget to the canvas area, stops animating while the
+  tab is hidden, and draws a single static frame under
+  `prefers-reduced-motion`. Dot spacing scales with the canvas so the per-frame
+  draw count stays near 6,500 at any resolution — a fixed grid was ~8,600 ops a
+  frame at 1080p and ~32,000 at 4K, which drops frames on exactly the big screen
+  this is for.
+- `public/art.js` draws the hexagonal badge, the ink starbursts behind the
+  countdown, and the burst that pops when a word falls.
+- `public/theme.js` applies a theme and runs the looping title card.
 - `public/sound.js` synthesises its audio from oscillators and filtered noise via
   Web Audio. The lobby bed is a plain four-bar minor loop (a chord sequence,
   which nobody owns) under a motif written for this page, with a timpani pulse;
@@ -194,7 +220,8 @@ account.
    if the screen has speakers.
 2. People scan the QR, type a name, and land in the lobby. Names appear as they
    arrive. Nobody's clock is running.
-3. Pick a **time limit per word** (default 90s, or off) and a **countdown**
+3. Optionally switch **theme** — *Cosmic Gauntlet* is the one for a projector.
+4. Pick a **time limit per word** (default 90s, or off) and a **countdown**
    length (3s, 5s, 10s or 30s). The settings panel prints a live estimate of how
    long the round will take, so you can fit the slot:
 
@@ -203,11 +230,11 @@ account.
    | 45s | ~10 min | 18 min |
    | 60s | ~13 min | 23 min |
    | 90s | ~18 min | 33 min |
-4. Press **Start the quiz**. Everyone sees the same countdown; the host view
+5. Press **Start the quiz**. Everyone sees the same countdown; the host view
    flips itself to the leaderboard so you can watch.
-5. **Remove** takes someone off the board; they can be let back in, keeping the
+6. **Remove** takes someone off the board; they can be let back in, keeping the
    run they had.
-6. **Reset and kick everyone** clears the board and throws every player out to
+7. **Reset and kick everyone** clears the board and throws every player out to
    the join screen; each of them has to join again deliberately. Anyone you
    removed **stays removed** — only *Let back in* undoes that.
 
@@ -229,10 +256,13 @@ src/words.js      the puzzles, and the only shape a client may see
 src/game.js       marking, scoring, ranking
 src/db.js         SQLite schema, queries, round phases
 src/auth.js       Cloudflare Access JWT verification
+src/themes.js     built-in themes, and loading your own
 src/server.js     HTTP + WebSocket
 public/app.js     player client (holds no answers, keeps no authority)
 public/admin.js   host portal
-public/art.js     procedural comic artwork
+public/art.js     badge, starbursts, ink bursts
+public/scenes.js  background scenes (comic, cosmic)
+public/theme.js   theme application and the intro card
 public/sound.js   procedural audio
 public/styles.css one stylesheet, both themes
 scripts/          build, deploy, local, logs, backup
@@ -257,6 +287,9 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 | `POST /api/admin/reset` | new round, board wiped |
 | `POST /api/admin/kick` / `unkick` | `{playerId}` |
 | `GET` / `PUT /api/admin/words` | read and replace the word list |
+| `GET /api/theme` | the active theme (public; every page needs it to paint) |
+| `GET /api/admin/themes` | every theme, and which is live |
+| `POST /api/admin/theme` | `{id}` → switch for everyone at once |
 | `WS /ws/admin` | live leaderboard stream |
 
 ## Tests
@@ -267,7 +300,7 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-Sixty-six checks against a live server (`test/smoke.mjs`), driving two players at
+Seventy-four checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the
@@ -275,4 +308,10 @@ server-enforced timeout, kick and reinstate, word-list validation, and a reset
 returning the round to the lobby and ejecting everyone while keeping removals.
 One check asserts that no answer appears anywhere in the board payload. The
 suite resets the round itself at the start, so it is safe to re-run against a
-long-lived container.
+long-lived container. The theme API is covered too, including a rejected unknown
+theme and a path-traversal attempt on the assets route.
+
+The scenes are additionally executed headlessly against a recording canvas stub
+(`node /tmp/scenecheck.mjs` pattern) to prove 120 frames run at both desktop and
+phone sizes with no `NaN`, `undefined` or malformed colour ever reaching the
+canvas API.

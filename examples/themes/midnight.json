@@ -1,0 +1,27 @@
+{
+  "id": "midnight",
+  "name": "Midnight Protocol",
+  "blurb": "Cold blues and a hard cyan edge, for a late-slot review. Cosmic scene with its own title card.",
+  "scene": "cosmic",
+  "wordmark": { "lead": "SIX", "tail": "Panels" },
+  "intro": {
+    "title": "MIDNIGHT",
+    "subtitle": "Twenty words. Six guesses. One clock.",
+    "everyMs": 16000
+  },
+  "palette": {
+    "paper": "#060910",
+    "surface": "#0E1624",
+    "sunk": "#09101B",
+    "ink": "#E6F1FF",
+    "muted": "#7D93B2",
+    "hair": "#1E2D44",
+    "red": "#FF4D6D",
+    "gold": "#FFD166",
+    "green": "#2EE6A8",
+    "azure": "#4DD9FF",
+    "tile-edge": "#294059",
+    "on-solid": "#060910",
+    "panel-shadow": "#02050A"
+  }
+}

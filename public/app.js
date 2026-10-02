@@ -20,7 +20,6 @@
   let busy = false;
   let toastTimer = 0;
   let hadJoined = false;   // a reset deletes the server-side player, so remember
-  let stopArt = null;      // backdrop animation handle
   let lastTick = null;     // last countdown second announced, so each pips once
   let lastPhase = null;    // to fire the go sting exactly once
   let lastOutcome = -1;    // puzzle index whose result has already been celebrated
@@ -42,12 +41,10 @@
 
   /* ----------------------------------------------------------------- art --- */
 
-  /* The animated backdrop runs only on the waiting screens, where there is
+  /* The themed backdrop runs only on the waiting screens, where there is
      nothing to read and it has the stage to itself. */
   function setArt(on) {
-    document.body.classList.toggle("art-on", !!on);
-    if (on && !stopArt) stopArt = window.ComicArt?.backdrop(document.getElementById("backdrop")) || null;
-    if (!on && stopArt) { stopArt(); stopArt = null; }
+    window.Theme?.setBackdrop(!!on);
   }
 
   /* ----------------------------------------------------------------- api --- */
@@ -514,6 +511,10 @@
     ws.onmessage = (ev) => {
       let msg = null;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === "theme") {
+        window.Theme?.load();
+        return;
+      }
       if (msg.type === "ejected") {
         onEjected();
         refresh();
@@ -541,6 +542,7 @@
   window.Sfx?.button($("soundBtn"), () => false);
 
   setStatus();
+  window.Theme?.load().then(() => render());
   refresh();
   connect();
 })();
