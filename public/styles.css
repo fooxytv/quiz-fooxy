@@ -547,5 +547,6 @@ body.focus-board .useno{font-size:19px}
   margin:0 0 12px;text-align:center;font-weight:700;font-size:13px;
   letter-spacing:.08em;text-transform:uppercase;color:var(--azure);
 }
-/* One style for every given letter: nobody cares which were free. */
-.known .kn.on{border-bottom-color:var(--gold);color:var(--gold)}
+/* A given letter sits in the grid, locked. Green because it IS correct, with an
+   inner ring so it reads as placed-for-you rather than earned. */
+.tile.given{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--on-solid) 55%,transparent)}

@@ -39,6 +39,12 @@ setting** on the host screen rather than three:
 | **Helpful** *(default)* | 1 letter showing | 10s |
 | **Generous** | 2 letters showing | nothing |
 
+A given letter **lands in the grid, in its own square**, locked and green, on every
+row still to come — not in a separate hangman-style line underneath. You then type
+only into the squares still blank, so a six-letter word with two letters given takes
+four keystrokes, and the guess is assembled from both halves when you press Enter.
+Given letters light up green on the keyboard too.
+
 Players can take **as many letters as they like** at any level — the only limit is
 that the last unknown letter is never given, so the word still has to be typed.
 A letter is paid for by moving that word's start time *backwards*, which is one

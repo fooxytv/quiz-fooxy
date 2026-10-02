@@ -70,6 +70,12 @@
     if (typeof payload.serverNow === "number") clockSkew = payload.serverNow - Date.now();
     if (payload.joined !== false) hadJoined = true;
     state = payload;
+    /* Taking a letter shrinks the number of blanks, so trim anything already
+       typed past the new count -- otherwise the row is full and unsubmittable. */
+    if (state.current && state.current.status === "open" && state.current.length) {
+      const room = freeSlots().length;
+      if (typed.length > room) typed = typed.slice(0, room);
+    }
     render();
   }
 
@@ -253,12 +259,7 @@
           </div>
           ${state.limitMs && !closed ? `<div class="tbar ${barClass()}" id="tbar"><i style="width:${barPct()}%"></i></div>` : ""}
           ${!closed && c.bigHint ? `<p class="bighint">${esc(c.bigHint)}</p>` : ""}
-          ${!closed && c.revealed && c.revealed.length ? `<div class="known" aria-label="Letters you have been given">
-            ${Array.from({ length: c.length }, (_, i) => {
-              const hit = c.revealed.find((r) => r.i === i);
-              return `<span class="kn ${hit ? "on" : ""}">${hit ? esc(hit.ch) : ""}</span>`;
-            }).join("")}
-          </div>` : ""}
+
           <div class="grid" id="grid" style="--len:${c.length}">${gridRows()}</div>
           <p class="toast" id="toast"></p>
           ${closed ? outcome() : keyboard() + lifelines()}
@@ -335,9 +336,36 @@
     }
   }
 
+  /*
+   * A letter you are given is placed in the grid where it belongs, locked, rather
+   * than listed underneath. So `typed` holds only the letters for the positions
+   * still blank, and the guess is assembled from both when it is submitted.
+   */
+  function knownAt() {
+    const m = new Map();
+    for (const r of state.current.revealed || []) m.set(r.i, r.ch);
+    return m;
+  }
+  function freeSlots() {
+    const known = knownAt();
+    return Array.from({ length: state.current.length }, (_, i) => i).filter((i) => !known.has(i));
+  }
+  /** The word as it would be submitted right now, or null if still incomplete. */
+  function assembled() {
+    const known = knownAt();
+    const slots = freeSlots();
+    if (typed.length !== slots.length) return null;
+    const out = new Array(state.current.length);
+    for (const [i, ch] of known) out[i] = ch;
+    slots.forEach((pos, k) => { out[pos] = typed[k]; });
+    return out.join("");
+  }
+
   function gridRows() {
     const c = state.current;
     const n = c.length;
+    const known = knownAt();
+    const slots = freeSlots();
     let html = "";
     for (let row = 0; row < state.maxTries; row++) {
       const done = c.rows[row];
@@ -345,8 +373,17 @@
       let cells = "";
       for (let k = 0; k < n; k++) {
         let cls = "tile", ch = "";
-        if (done) { cls += " " + done.marks[k]; ch = done.guess[k]; }
-        else if (isCur && typed[k]) { cls += " filled pop"; ch = typed[k]; }
+        if (done) {
+          cls += " " + done.marks[k];
+          ch = done.guess[k];
+        } else if (known.has(k)) {
+          /* Given letters show in place on every row still to come. */
+          cls += " hit given";
+          ch = known.get(k);
+        } else if (isCur) {
+          const at = slots.indexOf(k);
+          if (at >= 0 && typed[at]) { cls += " filled pop"; ch = typed[at]; }
+        }
         cells += `<div class="${cls}">${ch}</div>`;
       }
       html += `<div class="grid-row${isCur && shake ? " bad" : ""}" style="--len:${n}">${cells}</div>`;
@@ -356,6 +393,7 @@
 
   function keyStates() {
     const st = {}, rank = { miss: 1, near: 2, hit: 3 };
+    for (const [, ch] of knownAt()) st[ch] = "hit";
     for (const r of state.current.rows) {
       for (let k = 0; k < r.guess.length; k++) {
         const c = r.guess[k];
@@ -496,7 +534,8 @@
     if (!c || c.status !== "open") return;
     if (k === "DEL") { typed = typed.slice(0, -1); return repaintGrid(); }
     if (k === "ENTER") return submit();
-    if (!/^[A-Z]$/.test(k) || typed.length >= c.length) return;
+    /* Only the blank positions are yours to fill. */
+    if (!/^[A-Z]$/.test(k) || typed.length >= freeSlots().length) return;
     typed += k;
     window.Sfx?.key();
     repaintGrid();
@@ -504,12 +543,13 @@
 
   async function submit() {
     const c = state.current;
-    if (typed.length !== c.length) {
+    const guess = assembled();
+    if (guess === null) {
+      const left = freeSlots().length - typed.length;
       shake = true; repaintGrid();
       setTimeout(() => { shake = false; repaintGrid(); }, 340);
-      return toast(`Needs ${c.length} letters`);
+      return toast(left === 1 ? "One more letter" : `${left} more letters`);
     }
-    const guess = typed;
     busy = true;
     try {
       const next = await api("/api/guess", { guess });
