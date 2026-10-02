@@ -12,6 +12,8 @@
 <style>
   .loginwrap{max-width:420px;margin:0 auto;padding:40px 16px}
   .loginwrap h1{font-size:34px;line-height:.95;margin-bottom:6px}
+  .pwrow{display:flex;gap:6px;align-items:stretch}
+  .pwrow input{flex:1 1 auto;min-width:0}
 </style>
 </head>
 <body>
@@ -29,7 +31,11 @@
       <p class="meta" style="margin:0 0 16px">The quiz itself is open to anyone with the link. This screen is not.</p>
       <form id="f" autocomplete="on">
         <label class="fieldlabel" for="pw">Admin password</label>
-        <input type="password" id="pw" name="password" autocomplete="current-password" required>
+        <div class="pwrow">
+          <input type="password" id="pw" name="password" autocomplete="current-password" required>
+          <button class="btn ghost sm" id="show" type="button" aria-pressed="false">Show</button>
+        </div>
+        <p class="meta" id="len" style="margin:6px 0 0;font-size:12px"></p>
         <div class="row">
           <button class="btn" type="submit" id="go">Open the host screen</button>
         </div>
@@ -46,6 +52,29 @@
   const go = document.getElementById("go");
   const msg = document.getElementById("msg");
   pw.focus();
+
+  /* A browser can autofill a password you set previously, and a stray space is
+     invisible. Both look like "the password does not work", so let it be seen. */
+  const show = document.getElementById("show");
+  const len = document.getElementById("len");
+  show.onclick = () => {
+    const on = pw.type === "password";
+    pw.type = on ? "text" : "password";
+    show.textContent = on ? "Hide" : "Show";
+    show.setAttribute("aria-pressed", String(on));
+    pw.focus();
+  };
+  const count = () => {
+    const v = pw.value;
+    if (!v) { len.textContent = ""; return; }
+    const odd = [];
+    if (/^\s|\s$/.test(v)) odd.push("starts or ends with a space");
+    if (/^["']|["']$/.test(v)) odd.push("has a quote at the edge");
+    len.textContent = `${v.length} characters${odd.length ? " - " + odd.join(", ") : ""}`;
+    len.style.color = odd.length ? "var(--red)" : "var(--muted)";
+  };
+  pw.addEventListener("input", count);
+  setTimeout(count, 400);   // catches a browser autofill
   f.onsubmit = async (e) => {
     e.preventDefault();
     go.disabled = true;
