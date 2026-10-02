@@ -1,7 +1,35 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { BUILTIN_PUZZLES, validatePuzzles } from "./words.js";
+
+/*
+ * SQLite comes from Node itself (node:sqlite), so there is no native module to
+ * compile. Present without a flag from Node 22.5; the image ships 24, which is
+ * what gets tested. Resolved dynamically so an unsupported runtime produces an
+ * instruction rather than a bare ERR_UNKNOWN_BUILTIN_MODULE stack.
+ */
+let DatabaseSync;
+try {
+  ({ DatabaseSync } = await import("node:sqlite"));
+  if (typeof DatabaseSync !== "function") throw new Error("node:sqlite has no DatabaseSync");
+} catch (cause) {
+  console.error("");
+  console.error("  Cannot start: this app stores data with Node's built-in SQLite (node:sqlite).");
+  console.error(`  Running on Node ${process.version}. That module arrived in Node 22.5, and the`);
+  console.error("  image ships Node 24, so a runtime this old means the image was not built");
+  console.error("  from the Dockerfile in this repo.");
+  console.error("");
+  console.error("  On an early Node 22 it may need a flag:  node --experimental-sqlite src/server.js");
+  console.error("");
+  console.error("  In Docker this means the image was built on an old base. Rebuild pulling");
+  console.error("  a fresh base image:");
+  console.error("      ./scripts/local.sh        (local, already passes --pull)");
+  console.error("      docker compose build --pull && docker compose up -d");
+  console.error("");
+  console.error(`  Underlying error: ${cause && cause.message}`);
+  console.error("");
+  process.exit(1);
+}
 
 export const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "quiz.sqlite");

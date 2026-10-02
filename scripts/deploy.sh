@@ -37,7 +37,7 @@ COMPOSE=(docker compose)
 docker compose version >/dev/null 2>&1 || COMPOSE=(docker-compose)
 
 echo "==> Building"
-"${COMPOSE[@]}" build
+"${COMPOSE[@]}" build --pull
 
 echo "==> Starting"
 "${COMPOSE[@]}" up -d

@@ -34,7 +34,7 @@ lan_ip() {
 start() {
   local bind="$1" url="$2"
   echo "==> Building the image from this working tree"
-  LOCAL_BIND="$bind" LOCAL_PORT="$PORT" LOCAL_PUBLIC_URL="$url" "${COMPOSE[@]}" build
+  LOCAL_BIND="$bind" LOCAL_PORT="$PORT" LOCAL_PUBLIC_URL="$url" "${COMPOSE[@]}" build --pull
 
   echo "==> Starting"
   LOCAL_BIND="$bind" LOCAL_PORT="$PORT" LOCAL_PUBLIC_URL="$url" "${COMPOSE[@]}" up -d

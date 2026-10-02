@@ -99,7 +99,8 @@ fault. There is a Sound button in the header of both pages.
 
 ## Stack
 
-Node 24 (`node:sqlite`, built in — no native modules to compile), Express, `ws`
+Node 24 (`node:sqlite`, built in — no native modules to compile; the module
+exists from Node 22.5, and 24 is what the image ships and the tests run on), Express, `ws`
 for live updates, and `qrcode` to render the join code server-side. One container
 plus a `cloudflared` sidecar. State lives in SQLite on a volume and survives
 restarts, so you get history across sessions rather than one throwaway game.
@@ -164,6 +165,7 @@ non-zero, rather than claiming success.
 | `./scripts/logs.sh [service]` | follow the logs (`quiz` by default, or `tunnel`) |
 | `./scripts/backup.sh [dir]` | consistent SQLite snapshot plus the word list |
 | `./scripts/local.sh` | run it locally in Docker, no Cloudflare needed |
+| `./scripts/doctor.sh` | collect versions and logs when something will not start |
 
 `deploy.sh` warns if `CF_ACCESS_AUD` or `CF_ACCESS_TEAM_DOMAIN` are still unset
 or left as the placeholder — the admin portal refuses everything in that state,
@@ -182,6 +184,19 @@ npm run dev              # http://localhost:3000 and /admin via the loopback byp
 `npm run dev` sets `ADMIN_DEV_BYPASS=1`, which lets **loopback requests only**
 reach the admin portal with no Access token. Never set it on the deployed
 container.
+
+## When a build or start fails
+
+```bash
+./scripts/doctor.sh                       # versions, images, logs, ports, disk
+./scripts/local.sh 2>&1 | tee /tmp/quiz-build.log
+```
+
+All three build scripts pass `--pull`, so a stale local `node:24` tag cannot be
+picked up — that is the usual cause of an otherwise inexplicable failure about
+`node:sqlite`, since an old base image would not have the module. If the runtime
+really is too old the app now exits with an instruction naming the Node version
+it found, rather than an `ERR_UNKNOWN_BUILTIN_MODULE` stack.
 
 ## Cloudflare setup
 
@@ -265,7 +280,7 @@ public/scenes.js  background scenes (comic, cosmic)
 public/theme.js   theme application and the intro card
 public/sound.js   procedural audio
 public/styles.css one stylesheet, both themes
-scripts/          build, deploy, local, logs, backup
+scripts/          build, deploy, local, logs, backup, doctor
 test/smoke.mjs    end-to-end suite
 ```
 

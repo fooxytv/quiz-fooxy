@@ -9,7 +9,7 @@ TAG="${TAG:-latest}"
 GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
 
 echo "==> Building ${IMAGE}:${TAG}  (source ${GIT_SHA})"
-docker build --tag "${IMAGE}:${TAG}" --tag "${IMAGE}:${GIT_SHA}" .
+docker build --pull --tag "${IMAGE}:${TAG}" --tag "${IMAGE}:${GIT_SHA}" .
 
 echo
 echo "==> Built"
