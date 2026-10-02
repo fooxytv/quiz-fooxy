@@ -395,6 +395,11 @@ for (const [what, needle] of [
   ["the skip allowance control is wired", "data-skips"],
   ["the board shows skips and letters bought", "p.reveals"],
   ["the help control is wired", "data-help"],
+  ["the level picker is wired", "data-level"],
+  ["the full-screen QR is available from either tab", 'id="bigQrBtn"'],
+  ["the full-screen QR has a Q shortcut", 'toLowerCase() === "q"'],
+  ["the board ranks on points client-side too", "function ranked()"],
+  ["rows flash when someone moves up", "movedup"],
   ["the board shows hints used", "p.hints"],
   ["the host can test sound on demand", 'id="testSound"'],
   ["the host is told the audio state", 'id="soundState"'],
@@ -451,6 +456,60 @@ for (const [level, freeExpected, costExpected] of [["off", 0, null], ["helpful",
   const bd = await call("/api/admin/board");
   check(`"${level}" board counts the hint`, bd.data.players[0].hints >= 1, `hints=${bd.data.players[0].hints}`);
 }
+await call("/api/admin/help", "POST", { help: "helpful" });
+
+// ---- levels and points -----------------------------------------------------
+/* The level is lobby-only, so reach the validation path from the lobby. */
+await call("/api/admin/reset", "POST");
+r = await call("/api/admin/level", "POST", { level: 99 });
+check("bogus level refused", r.status === 400 && r.data.error === "bad_level", `status=${r.status}`);
+
+const { BUILTIN_PUZZLES: POOL, levelById } = await import("../src/words.js");
+for (const lvl of [1, 3, 5]) {
+  await call("/api/admin/reset", "POST");
+  await call("/api/admin/count", "POST", { count: 6 });
+  r = await call("/api/admin/level", "POST", { level: lvl });
+  check(`level ${lvl} accepted`, r.data.ok === true && r.data.level === lvl);
+  await call("/api/join", "POST", { name: "Lvl" });
+  r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+  await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+  const want = levelById(lvl).tiers;
+  /* Walk the whole round and confirm every word came from this level's band. */
+  const seenTiers = new Set();
+  for (let i = 0; i < 6; i++) {
+    let st = (await call("/api/state")).data;
+    if (!st.current || !st.current.tier) break;
+    seenTiers.add(st.current.tier);
+    for (let g = 0; g < 6; g++) {
+      const res = await call("/api/guess", "POST", { guess: "Z".repeat(st.current.length) });
+      if (res.status !== 200) break;
+      st = res.data;
+      if (st.current.status !== "open") break;
+    }
+    if (i < 5) await call("/api/next", "POST");
+  }
+  check(`level ${lvl} only draws on ${want.join(" and ")}`,
+    [...seenTiers].every((t) => want.includes(t)), [...seenTiers].join(", "));
+}
+r = await call("/api/admin/level", "POST", { level: 1 });
+
+/* Points must punish taking letters you were not given. */
+await call("/api/admin/reset", "POST");
+await call("/api/admin/count", "POST", { count: 3 });
+await call("/api/admin/help", "POST", { help: "generous" });
+await call("/api/join", "POST", { name: "Scorer" });
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+let sc = (await call("/api/state")).data;
+const answer3 = POOL.find((p) => p.hint === sc.current.hint).answer;
+check("score starts at zero", sc.score === 0, `score=${sc.score}`);
+const freeGiven = sc.current.revealed.length;
+r = await call("/api/guess", "POST", { guess: answer3 });
+const unaided = r.data.score;
+check("a first-guess solve scores well even with the free letters",
+  unaided >= 140, `score=${unaided} after ${freeGiven} free letters`);
+check("the board reports points and ranks on them",
+  (await call("/api/admin/board")).data.players[0].score === unaided);
 await call("/api/admin/help", "POST", { help: "helpful" });
 
 // ---- themes ---------------------------------------------------------------

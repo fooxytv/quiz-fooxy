@@ -64,9 +64,10 @@ db.exec(`
     phase        TEXT NOT NULL DEFAULT 'lobby',
     starts_at    INTEGER,
     countdown_ms INTEGER NOT NULL DEFAULT 5000,
-    question_count INTEGER NOT NULL DEFAULT 20,
+    question_count INTEGER NOT NULL DEFAULT 10,
     skips_allowed  INTEGER NOT NULL DEFAULT 3,
-    help_level     TEXT NOT NULL DEFAULT 'helpful'
+    help_level     TEXT NOT NULL DEFAULT 'helpful',
+    level          INTEGER NOT NULL DEFAULT 1
   );
   CREATE TABLE IF NOT EXISTS players (
     id        TEXT PRIMARY KEY,
@@ -90,6 +91,7 @@ db.exec(`
     skipped    INTEGER NOT NULL DEFAULT 0,
     revealed   TEXT NOT NULL DEFAULT '[]',
     big_hint   INTEGER NOT NULL DEFAULT 0,
+    free_letters INTEGER NOT NULL DEFAULT 0,
     tries      INTEGER NOT NULL DEFAULT 0,
     guesses    TEXT NOT NULL DEFAULT '[]',
     started_at INTEGER,
@@ -124,8 +126,10 @@ ensureColumn("progress", "skipped", "skipped INTEGER NOT NULL DEFAULT 0");
 ensureColumn("progress", "revealed", "revealed TEXT NOT NULL DEFAULT '[]'");
 ensureColumn("players", "reveals_used", "reveals_used INTEGER NOT NULL DEFAULT 0");
 ensureColumn("rounds", "help_level", "help_level TEXT NOT NULL DEFAULT 'helpful'");
+ensureColumn("rounds", "level", "level INTEGER NOT NULL DEFAULT 1");
 ensureColumn("players", "hints_used", "hints_used INTEGER NOT NULL DEFAULT 0");
 ensureColumn("progress", "big_hint", "big_hint INTEGER NOT NULL DEFAULT 0");
+ensureColumn("progress", "free_letters", "free_letters INTEGER NOT NULL DEFAULT 0");
 
 /* ---------- word list ---------- */
 
@@ -175,12 +179,12 @@ export function activeRound() {
   return newRound(DEFAULT_LIMIT_MS);
 }
 
-export function newRound(limitMs, countdownMs = 5000, questionCount = 20, skipsAllowed = 3, helpLevel = "helpful") {
+export function newRound(limitMs, countdownMs = 5000, questionCount = 10, skipsAllowed = 3, helpLevel = "helpful", level = 1) {
   const puzzles = loadPuzzles();
   const count = Math.max(1, Math.min(questionCount, puzzles.length));
   const info = db.prepare(
-    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count, skips_allowed, help_level) VALUES (?, ?, ?, 'lobby', NULL, ?, ?, ?, ?)"
-  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count, skipsAllowed, helpLevel);
+    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count, skips_allowed, help_level, level) VALUES (?, ?, ?, 'lobby', NULL, ?, ?, ?, ?, ?)"
+  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count, skipsAllowed, helpLevel, level);
   return db.prepare("SELECT * FROM rounds WHERE id = ?").get(Number(info.lastInsertRowid));
 }
 
@@ -235,14 +239,24 @@ export function revealLetter(playerId, idx, index, penaltyMs) {
   return getRow(playerId, idx);
 }
 
+/* Lobby only, like the round length: changing the band mid-round would mean
+   redrawing sequences people are already partway through. */
+export function setRoundLevel(roundId, level) {
+  tx(() => {
+    db.prepare("UPDATE rounds SET level = ? WHERE id = ?").run(level, roundId);
+    db.prepare("UPDATE players SET sequence = NULL, idx = 0, skips_used = 0, reveals_used = 0, hints_used = 0 WHERE round_id = ?").run(roundId);
+    db.prepare("DELETE FROM progress WHERE player_id IN (SELECT id FROM players WHERE round_id = ?)").run(roundId);
+  });
+}
+
 export function setRoundHelp(roundId, level) {
   db.prepare("UPDATE rounds SET help_level = ? WHERE id = ?").run(level, roundId);
 }
 
 /** Letters the round hands over for nothing, at no time cost. */
 export function giveFreeLetters(playerId, idx, positions) {
-  db.prepare("UPDATE progress SET revealed = ? WHERE player_id = ? AND puzzle_idx = ?")
-    .run(JSON.stringify(positions), playerId, idx);
+  db.prepare("UPDATE progress SET revealed = ?, free_letters = ? WHERE player_id = ? AND puzzle_idx = ?")
+    .run(JSON.stringify(positions), positions.length, playerId, idx);
   return getRow(playerId, idx);
 }
 

@@ -203,6 +203,7 @@
           <div class="emblem-big">${window.ComicArt?.emblem(64) || ""}</div>
           <div class="lobbydots"><i></i><i></i><i></i></div>
           <h1 class="joinh1" style="font-size:38px;line-height:.95;margin:14px 0 8px">You're in, ${esc(state.name)}</h1>
+          ${state.levelName ? `<p class="cat" style="margin:0 0 4px">Level ${state.level} &middot; ${esc(state.levelName)}</p>` : ""}
           <p class="meta" style="margin:0 auto;max-width:34em">Waiting for the host to start. Nobody's clock is running yet &mdash; the first word appears for everyone at the same moment.</p>
           <div class="hr"></div>
           <div class="statrow" style="justify-content:center">
@@ -485,6 +486,7 @@
           <div class="cat">Run complete</div>
           <h1 class="joinh1" style="font-size:40px;line-height:.92;margin:4px 0 12px">${state.solved} of ${state.puzzleCount} cracked</h1>
           <div class="statrow">
+            <div class="stat"><b class="mono-num">${state.score ?? 0}</b><span>Points</span></div>
             <div class="stat"><b class="mono-num">${state.solved}/${state.puzzleCount}</b><span>Solved</span></div>
             <div class="stat"><b class="mono-num">${fmt(state.totalMs)}</b><span>Total time</span></div>
             <div class="stat"><b class="mono-num">${state.guesses}</b><span>Guesses used</span></div>

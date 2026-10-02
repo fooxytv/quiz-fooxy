@@ -6,9 +6,13 @@
  * portal). Keep answers A-Z only, 4-8 letters.
  */
 /*
- * Known close pair, accepted deliberately: MYSTERIO and MYSTIQUE share MYST at
- * the front. Guessing one while holding the other returns four greens, which
- * helps rather than hurts, and both are too well known to drop.
+ * Scope: the Infinity Saga only -- Iron Man (2008) through Endgame (2019).
+ * Nothing from Phase 4 onward, no X-Men, no comics-only deep cuts. A quiz
+ * nobody can answer is not fun, and the point of this one is that everybody
+ * has seen the films it asks about.
+ *
+ * Real surnames are deliberately included -- Stark, Rogers, Banner, Parker,
+ * Barton, Romanoff -- because they are easy to recognise and satisfying to get.
  */
 export const BUILTIN_PUZZLES = [
   { answer: "LOKI",          tier: "WARM UP",  hint: "God of mischief, adopted brother",              category: "VILLAIN",    fact: "Tom Hiddleston originally auditioned for the hero, not the villain." },
@@ -23,13 +27,15 @@ export const BUILTIN_PUZZLES = [
   { answer: "SPIDERMAN",     tier: "WARM UP",  hint: "Wall-crawler bitten by an arachnid",            category: "HERO",       fact: "Three actors have played him together in a single film. Two words on screen." },
   { answer: "WOLVERINE",     tier: "WARM UP",  hint: "Clawed loner with a healing factor",            category: "HERO",       fact: "He debuted as a minor antagonist in a Hulk comic in 1974." },
   { answer: "STORM",         tier: "WARM UP",  hint: "Mutant who commands the weather",               category: "HERO",       fact: "She was one of the first black women to lead a major team." },
+  { answer: "GROOT",         tier: "WARM UP",  hint: "Talking tree, three-word vocabulary",           category: "HERO",       fact: "Vin Diesel recorded his three words in several languages." },
+  { answer: "WANDA",         tier: "WARM UP",  hint: "Scarlet Witch's first name",                    category: "ALIAS",      fact: "She and her brother arrived in a post-credits scene, years early." },
+  { answer: "FURY",          tier: "WARM UP",  hint: "One-eyed architect of the Avengers",            category: "ALIAS",      fact: "Samuel L. Jackson's likeness inspired the comics version before he was ever cast." },
+  { answer: "ROCKET",        tier: "WARM UP",  hint: "Armed, angry, and not a raccoon",               category: "HERO",       fact: "Bradley Cooper voices him; Sean Gunn performed the on-set reference." },
+  { answer: "THANOS",        tier: "WARM UP",  hint: "Warlord obsessed with balance",                 category: "VILLAIN",    fact: "Josh Brolin played him in a motion-capture suit, face dots and all." },
+  { answer: "VISION",        tier: "WARM UP",  hint: "Android born of the Mind Stone",                category: "HERO",       fact: "Paul Bettany voiced the suit's computer for years before playing him." },
   { answer: "STARK",         tier: "EASY",     hint: "Iron Man's surname",                            category: "ALIAS",      fact: "Robert Downey Jr. improvised the line that launched the whole MCU." },
-  { answer: "GROOT",         tier: "EASY",     hint: "Talking tree, three-word vocabulary",           category: "HERO",       fact: "Vin Diesel recorded his three words in several languages." },
   { answer: "HYDRA",         tier: "EASY",     hint: "Cut off one head, two more grow",               category: "ORG",        fact: "The name comes from the many-headed serpent of Greek myth." },
-  { answer: "WANDA",         tier: "EASY",     hint: "Scarlet Witch's first name",                    category: "ALIAS",      fact: "She and her brother arrived in a post-credits scene, years early." },
   { answer: "BUCKY",         tier: "EASY",     hint: "The Captain's oldest friend",                   category: "HERO",       fact: "Believed dead for decades before returning as the Winter Soldier." },
-  { answer: "FURY",          tier: "EASY",     hint: "One-eyed architect of the Avengers",            category: "ALIAS",      fact: "Samuel L. Jackson's likeness inspired the comics version before he was ever cast." },
-  { answer: "ROCKET",        tier: "EASY",     hint: "Armed, angry, and not a raccoon",               category: "HERO",       fact: "Bradley Cooper voices him; Sean Gunn performed the on-set reference." },
   { answer: "VENOM",         tier: "EASY",     hint: "Alien symbiote with a taste for trouble",       category: "ANTI-HERO",  fact: "The symbiote appeared in the comics years before the character fans know today." },
   { answer: "FALCON",        tier: "EASY",     hint: "Avenger with mechanical wings",                 category: "HERO",       fact: "Widely cited as mainstream comics' first African-American superhero." },
   { answer: "MANTIS",        tier: "EASY",     hint: "Empath with antennae",                          category: "HERO",       fact: "An empath in the comics long before she reached the screen." },
@@ -43,12 +49,15 @@ export const BUILTIN_PUZZLES = [
   { answer: "MAGNETO",       tier: "EASY",     hint: "Master of magnetism in a crimson helm",         category: "VILLAIN",    fact: "His helmet exists purely to block telepathy." },
   { answer: "ROGUE",         tier: "EASY",     hint: "She absorbs whatever she touches",              category: "HERO",       fact: "For years she carried a flying brick's powers permanently." },
   { answer: "DEADPOOL",      tier: "EASY",     hint: "Merc with a mouth, breaks the fourth wall",     category: "ANTI-HERO",  fact: "He was created as a deliberate parody of another publisher's assassin." },
-  { answer: "THANOS",        tier: "STEADY",   hint: "Warlord obsessed with balance",                 category: "VILLAIN",    fact: "Josh Brolin played him in a motion-capture suit, face dots and all." },
-  { answer: "ASGARD",        tier: "STEADY",   hint: "Realm at the end of the bridge",                category: "PLACE",      fact: "In Norse myth it sits in the sky, not floating out in space." },
-  { answer: "SHIELD",        tier: "STEADY",   hint: "Spy agency with a forced acronym",              category: "ORG",        fact: "Its mouthful of a full name was rewritten once in the comics." },
-  { answer: "VISION",        tier: "STEADY",   hint: "Android born of the Mind Stone",                category: "HERO",       fact: "Paul Bettany voiced the suit's computer for years before playing him." },
+  { answer: "ASGARD",        tier: "EASY",     hint: "Realm at the end of the bridge",                category: "PLACE",      fact: "In Norse myth it sits in the sky, not floating out in space." },
+  { answer: "SHIELD",        tier: "EASY",     hint: "Spy agency with a forced acronym",              category: "ORG",        fact: "Its mouthful of a full name was rewritten once in the comics." },
+  { answer: "GAMORA",        tier: "EASY",     hint: "Adopted daughter who changed sides",            category: "HERO",       fact: "Known in the comics as one of the deadliest women in the galaxy." },
+  { answer: "WAKANDA",       tier: "EASY",     hint: "Kingdom hidden behind a veil",                  category: "PLACE",      fact: "Its on-screen language is Xhosa, coached to the cast by John Kani." },
+  { answer: "NEBULA",        tier: "EASY",     hint: "Cybernetic daughter, rebuilt repeatedly",       category: "HERO",       fact: "Karen Gillan endured hours of makeup for every appearance." },
+  { answer: "ROGERS",        tier: "EASY",     hint: "The First Avenger's surname",                   category: "ALIAS",      fact: "Skinny Steve was a digitally shrunk Chris Evans." },
+  { answer: "BANNER",        tier: "EASY",     hint: "Surname of a scientist with anger issues",      category: "ALIAS",      fact: "Three actors have played him on screen." },
+  { answer: "PARKER",        tier: "EASY",     hint: "Surname of a web-slinging teenager",            category: "ALIAS",      fact: "Tom Holland was a gymnast before he was cast." },
   { answer: "ULTRON",        tier: "STEADY",   hint: "Peacekeeping AI that chose war",                category: "VILLAIN",    fact: "James Spader performed it in motion capture, not just voice." },
-  { answer: "GAMORA",        tier: "STEADY",   hint: "Adopted daughter who changed sides",            category: "HERO",       fact: "Known in the comics as one of the deadliest women in the galaxy." },
   { answer: "HAWKEYE",       tier: "STEADY",   hint: "Avenger who rarely misses",                     category: "HERO",       fact: "Clint Barton began his comic-book career as an antagonist to Iron Man." },
   { answer: "MYSTERIO",      tier: "STEADY",   hint: "Master of illusions in a fishbowl helmet",      category: "VILLAIN",    fact: "In the comics, Quentin Beck was a Hollywood special-effects artist." },
   { answer: "KILLMONGER",    tier: "STEADY",   hint: "Challenger for a hidden throne",                category: "VILLAIN",    fact: "His scars each represent a kill he claims from his military career." },
@@ -67,9 +76,13 @@ export const BUILTIN_PUZZLES = [
   { answer: "XAVIER",        tier: "STEADY",   hint: "Bald telepath who founded a school",            category: "HERO",       fact: "Two knighted actors have played him on film." },
   { answer: "MYSTIQUE",      tier: "STEADY",   hint: "Blue shape-shifter with yellow eyes",           category: "VILLAIN",    fact: "Her full-body makeup famously took hours per day to apply." },
   { answer: "COLOSSUS",      tier: "STEADY",   hint: "He turns to organic steel",                     category: "HERO",       fact: "A Russian farm boy before the team found him." },
-  { answer: "WAKANDA",       tier: "TRICKY",   hint: "Kingdom hidden behind a veil",                  category: "PLACE",      fact: "Its on-screen language is Xhosa, coached to the cast by John Kani." },
-  { answer: "QUINJET",       tier: "TRICKY",   hint: "Five engines, one team's ride",                 category: "ARTIFACT",   fact: "The name is just quin- for five, bolted onto jet." },
-  { answer: "SOKOVIA",       tier: "TRICKY",   hint: "The Accords are named after it",                category: "PLACE",      fact: "An invented country, filmed mostly in Italy and South Africa." },
+  { answer: "QUINJET",       tier: "STEADY",   hint: "Five engines, one team's ride",                 category: "ARTIFACT",   fact: "The name is just quin- for five, bolted onto jet." },
+  { answer: "SOKOVIA",       tier: "STEADY",   hint: "The Accords are named after it",                category: "PLACE",      fact: "An invented country, filmed mostly in Italy and South Africa." },
+  { answer: "ZEMO",          tier: "STEADY",   hint: "He broke the Avengers without powers",          category: "VILLAIN",    fact: "His plan relied on manipulation, not superhuman ability." },
+  { answer: "YONDU",         tier: "STEADY",   hint: "Blue outlaw with a deadly whistle",             category: "ANTI-HERO",  fact: "The fin on his head steers his Yaka Arrow." },
+  { answer: "CHITAURI",      tier: "STEADY",   hint: "Alien army that fell on a city",                category: "ORG",        fact: "Created for the Ultimate comics line, not the original." },
+  { answer: "GAUNTLET",      tier: "STEADY",   hint: "Golden glove that holds six gems",              category: "ARTIFACT",   fact: "A replica hides in Odin's vault in the first Thor film." },
+  { answer: "BARTON",        tier: "STEADY",   hint: "Surname of the archer",                         category: "ALIAS",      fact: "He began in the comics as an enemy of Iron Man." },
   { answer: "VORMIR",        tier: "TRICKY",   hint: "A soul for a stone, on a cliff",                category: "PLACE",      fact: "The keeper of the stone is a villain from an entirely different film." },
   { answer: "KAMARTAJ",      tier: "TRICKY",   hint: "Where a surgeon learned the mystic arts",       category: "PLACE",      fact: "Placed in Kathmandu, Nepal. Written Kamar-Taj on screen." },
   { answer: "EGO",           tier: "TRICKY",   hint: "A hero's very complicated father",              category: "VILLAIN",    fact: "In the comics he is literally a living planet." },
@@ -78,10 +91,6 @@ export const BUILTIN_PUZZLES = [
   { answer: "XANDAR",        tier: "TRICKY",   hint: "Home world of the Nova Corps",                  category: "PLACE",      fact: "The Guardians saved it from Ronan the Accuser." },
   { answer: "TITAN",         tier: "TRICKY",   hint: "Dusty ruined world, home to a warlord",         category: "PLACE",      fact: "Iron Man, Spider-Man, Strange and the Guardians fought there." },
   { answer: "RONAN",         tier: "TRICKY",   hint: "Zealot with a very large hammer",               category: "VILLAIN",    fact: "The Accuser first appeared in the comics in 1967." },
-  { answer: "ZEMO",          tier: "TRICKY",   hint: "He broke the Avengers without powers",          category: "VILLAIN",    fact: "His plan relied on manipulation, not superhuman ability." },
-  { answer: "NEBULA",        tier: "TRICKY",   hint: "Cybernetic daughter, rebuilt repeatedly",       category: "HERO",       fact: "Karen Gillan endured hours of makeup for every appearance." },
-  { answer: "YONDU",         tier: "TRICKY",   hint: "Blue outlaw with a deadly whistle",             category: "ANTI-HERO",  fact: "The fin on his head steers his Yaka Arrow." },
-  { answer: "CHITAURI",      tier: "TRICKY",   hint: "Alien army that fell on a city",                category: "ORG",        fact: "Created for the Ultimate comics line, not the original." },
   { answer: "GRANDMASTER",   tier: "TRICKY",   hint: "Showman who runs the arena",                    category: "VILLAIN",    fact: "Jeff Goldblum improvised much of his dialogue." },
   { answer: "TALOKAN",       tier: "TRICKY",   hint: "Undersea kingdom of a winged king",             category: "PLACE",      fact: "Its design draws on Mesoamerican rather than Atlantean myth." },
   { answer: "MORAG",         tier: "TRICKY",   hint: "Abandoned world, flooded every few hours",      category: "PLACE",      fact: "An orb lay hidden in a temple there for centuries." },
@@ -94,9 +103,13 @@ export const BUILTIN_PUZZLES = [
   { answer: "SENTINELS",     tier: "TRICKY",   hint: "Giant purple mutant-hunting robots",            category: "ORG",        fact: "Built by a scientist who lost control of them immediately." },
   { answer: "DOOM",          tier: "TRICKY",   hint: "Armoured monarch, scientist and sorcerer",      category: "VILLAIN",    fact: "He has ruled a small European country since 1962." },
   { answer: "GALACTUS",      tier: "TRICKY",   hint: "He eats planets",                               category: "VILLAIN",    fact: "Introduced in 1966 with a herald on a surfboard." },
-  { answer: "HEIMDALL",      tier: "HARD",     hint: "All-seeing gatekeeper of a realm",              category: "HERO",       fact: "He can see and hear everything happening across all nine realms." },
-  { answer: "VALKYRIE",      tier: "HARD",     hint: "Last of a band of winged warriors",             category: "HERO",       fact: "In Norse myth, valkyries choose who lives and who dies in battle." },
-  { answer: "ROMANOFF",      tier: "HARD",     hint: "The spy's surname, not her codename",           category: "ALIAS",      fact: "She began in the comics as a Soviet spy, not a hero." },
+  { answer: "HEIMDALL",      tier: "TRICKY",   hint: "All-seeing gatekeeper of a realm",              category: "HERO",       fact: "He can see and hear everything happening across all nine realms." },
+  { answer: "VALKYRIE",      tier: "TRICKY",   hint: "Last of a band of winged warriors",             category: "HERO",       fact: "In Norse myth, valkyries choose who lives and who dies in battle." },
+  { answer: "ROMANOFF",      tier: "TRICKY",   hint: "The spy's surname, not her codename",           category: "ALIAS",      fact: "She began in the comics as a Soviet spy, not a hero." },
+  { answer: "MORDO",         tier: "TRICKY",   hint: "Fellow pupil who turned on magic",              category: "VILLAIN",    fact: "In the comics he is a far greater threat than on screen." },
+  { answer: "TCHALLA",       tier: "TRICKY",   hint: "The king's own name",                           category: "ALIAS",      fact: "Written with an apostrophe on screen." },
+  { answer: "HELA",          tier: "TRICKY",   hint: "Goddess of death in a black headdress",         category: "VILLAIN",    fact: "Cate Blanchett's first comic-book role." },
+  { answer: "KORG",          tier: "TRICKY",   hint: "Polite warrior made of rock",                   category: "HERO",       fact: "The director of the film plays him himself." },
   { answer: "KNOWHERE",      tier: "HARD",     hint: "Mining colony in a dead skull",                 category: "PLACE",      fact: "It is built inside the severed head of an ancient celestial being." },
   { answer: "EBONYMAW",      tier: "HARD",     hint: "Unnervingly calm telekinetic herald",           category: "VILLAIN",    fact: "One of the Children who attack Earth in Infinity War. Two words on screen." },
   { answer: "CORVUS",        tier: "HARD",     hint: "Glaive-wielding lieutenant",                    category: "VILLAIN",    fact: "His full comic-book name is Corvus Glaive." },
@@ -107,7 +120,6 @@ export const BUILTIN_PUZZLES = [
   { answer: "AETHER",        tier: "HARD",     hint: "A Stone that did not look like one",            category: "ARTIFACT",   fact: "Revealed much later to be the Reality Stone." },
   { answer: "JOTUNHEIM",     tier: "HARD",     hint: "Frozen realm of the Frost Giants",              category: "PLACE",      fact: "One of the Nine Realms of Asgardian cosmology." },
   { answer: "NAMOR",         tier: "HARD",     hint: "Feathered-serpent king of the deep",            category: "ANTI-HERO",  fact: "One of Marvel's oldest characters, created in 1939." },
-  { answer: "MORDO",         tier: "HARD",     hint: "Fellow pupil who turned on magic",              category: "VILLAIN",    fact: "In the comics he is a far greater threat than on screen." },
   { answer: "SYLVIE",        tier: "HARD",     hint: "A variant who wanted the throne",               category: "ANTI-HERO",  fact: "Her character is an original creation for the screen." },
   { answer: "MOBIUS",        tier: "HARD",     hint: "Analyst with a fondness for jet skis",          category: "HERO",       fact: "Owen Wilson plays him with a deliberately unhurried calm." },
   { answer: "WENWU",         tier: "HARD",     hint: "Father who wore ten rings",                     category: "VILLAIN",    fact: "The character replaced a crude racial caricature from the comics." },
@@ -120,6 +132,7 @@ export const BUILTIN_PUZZLES = [
   { answer: "SINISTER",      tier: "HARD",     hint: "Geneticist obsessed with bloodlines",           category: "VILLAIN",    fact: "He has been manipulating mutant lineages for over a century." },
   { answer: "MAESTRO",       tier: "HARD",     hint: "A future green brute, gone bad",                category: "VILLAIN",    fact: "He rules a ruined future city with no one left to stop him." },
   { answer: "BATTLEWORLD",   tier: "HARD",     hint: "Planet stitched from fragments of others",      category: "PLACE",      fact: "Each patch keeps its own rules, ruler and reality." },
+  { answer: "COULSON",       tier: "HARD",     hint: "The agent in the suit, from the start",         category: "ALIAS",      fact: "He got his own television series afterwards." },
   { answer: "SVARTALFHEIM",  tier: "BRUTAL",   hint: "Ancient realm of the Dark Elves",               category: "PLACE",      fact: "Malekith and the Dark Elves come from this realm." },
   { answer: "PROXIMA",       tier: "BRUTAL",   hint: "Spear-wielding child of a warlord",             category: "VILLAIN",    fact: "Her full name is Proxima Midnight." },
   { answer: "RAVONNA",       tier: "BRUTAL",   hint: "Judge of a time bureaucracy",                   category: "VILLAIN",    fact: "In the comics she is a love interest turned adversary." },
@@ -144,8 +157,20 @@ export const MAX_TRIES = 6;
 /** Ascending difficulty. A sequence is always built in this order. */
 export const TIER_ORDER = ["WARM UP", "EASY", "STEADY", "TRICKY", "HARD", "BRUTAL"];
 
-/** How a round of N is spread across the tiers. Sums to 1. */
-const TIER_SHAPE = [0.10, 0.18, 0.24, 0.22, 0.16, 0.10];
+/*
+ * Difficulty bands the host chooses between, so a session can open gentle and only
+ * get harder if people are enjoying it. Each level draws from two neighbouring
+ * tiers and still ramps within the round.
+ */
+export const LEVELS = [
+  { id: 1, label: "Level 1", name: "Nice and easy",  tiers: ["WARM UP", "EASY"] },
+  { id: 2, label: "Level 2", name: "Warming up",     tiers: ["EASY", "STEADY"] },
+  { id: 3, label: "Level 3", name: "Getting tricky", tiers: ["STEADY", "TRICKY"] },
+  { id: 4, label: "Level 4", name: "Hard",           tiers: ["TRICKY", "HARD"] },
+  { id: 5, label: "Level 5", name: "Brutal",         tiers: ["HARD", "BRUTAL"] },
+  { id: 0, label: "Mixed",   name: "All six tiers",  tiers: TIER_ORDER },
+];
+export const levelById = (id) => LEVELS.find((l) => l.id === Number(id)) || LEVELS[0];
 
 /** Round lengths the host can choose. */
 export const COUNT_CHOICES = [5, 10, 15, 20, 25, 30];
@@ -199,19 +224,35 @@ export function validatePuzzles(list) {
  * Returns indices into `pool`. Short tiers borrow from their neighbours rather
  * than leaving the round under-length.
  */
-/** How many questions each tier contributes, and how many it has to offer. */
-export function tierTargets(pool, count) {
-  const want = Math.max(1, Math.min(count, pool.length));
-  const have = TIER_ORDER.map((tier) =>
-    pool.filter((p) => (p.tier || "").toUpperCase() === tier).length);
-  const untiered = pool.length - have.reduce((a, b) => a + b, 0);
-  have[2] += untiered;
+/**
+ * How many questions each of a level's tiers contributes, and how deep each is.
+ * Spread as evenly as the tiers allow, lower tiers first so the round still ramps.
+ */
+export function tierTargets(pool, count, levelId = 1) {
+  const level = levelById(levelId);
+  const tiers = level.tiers;
+  const have = tiers.map((t) => pool.filter((p) => (p.tier || "").toUpperCase() === t).length);
+  const total = have.reduce((a, b) => a + b, 0);
+  const want = Math.max(1, Math.min(count, total));
 
-  const target = TIER_SHAPE.map((f) => Math.floor(want * f));
+  const target = tiers.map(() => Math.floor(want / tiers.length));
   let short = want - target.reduce((a, b) => a + b, 0);
-  const spareOrder = [2, 3, 1, 4, 0, 5];
-  for (let k = 0; short > 0; k++, short--) target[spareOrder[k % spareOrder.length]]++;
-  return TIER_ORDER.map((tier, i) => ({ tier, want: Math.min(target[i], have[i]), have: have[i] }));
+  for (let k = 0; short > 0; k++, short--) target[k % tiers.length]++;
+
+  /* A shallow tier hands its surplus to its neighbours rather than shrinking the round. */
+  let deficit = 0;
+  const out = tiers.map((tier, i) => {
+    const take = Math.min(target[i], have[i]);
+    deficit += target[i] - take;
+    return { tier, want: take, have: have[i] };
+  });
+  for (let i = 0; i < out.length && deficit > 0; i++) {
+    const room = out[i].have - out[i].want;
+    const add = Math.min(room, deficit);
+    out[i].want += add;
+    deficit -= add;
+  }
+  return out;
 }
 
 /**
@@ -219,15 +260,16 @@ export function tierTargets(pool, count) {
  * drawn from a tier of m, the expected shared count is k*k/m. Shallow tiers
  * dominate: a pool with three warm-ups cannot avoid repeating them.
  */
-export function expectedOverlap(pool, count) {
-  return tierTargets(pool, count)
+export function expectedOverlap(pool, count, levelId = 1) {
+  return tierTargets(pool, count, levelId)
     .reduce((sum, t) => sum + (t.have ? (t.want * t.want) / t.have : 0), 0);
 }
 
-export function buildSequence(pool, count, rand = Math.random) {
-  const want = Math.max(1, Math.min(count, pool.length));
+export function buildSequence(pool, count, rand = Math.random, levelId = 1) {
+  const level = levelById(levelId);
+  const targets = tierTargets(pool, count, levelId);
 
-  const byTier = TIER_ORDER.map((tier) => {
+  const byTier = level.tiers.map((tier) => {
     const idx = [];
     pool.forEach((p, i) => { if ((p.tier || "").toUpperCase() === tier) idx.push(i); });
     /* Fisher-Yates, so the words differ per player while the curve does not. */
@@ -238,21 +280,16 @@ export function buildSequence(pool, count, rand = Math.random) {
     return idx;
   });
 
-  /* Untiered entries are treated as the middle of the road. */
-  const known = new Set(byTier.flat());
-  pool.forEach((p, i) => { if (!known.has(i)) byTier[2].push(i); });
+  const taken = byTier.map((idx, i) => idx.slice(0, targets[i].want));
 
-  const target = tierTargets(pool, want).map((t) => t.want);
-  const taken = TIER_ORDER.map((t, i) => byTier[i].slice(0, Math.min(target[i], byTier[i].length)));
-  const leftovers = TIER_ORDER.flatMap((_, t) => byTier[t].slice(taken[t].length));
-
-  /* Make the length up from whatever is spare, nearest tiers first. */
-  let deficit = want - taken.flat().length;
+  /* Short of the asked-for length only when the level itself has run dry. */
+  const leftovers = byTier.flatMap((idx, i) => idx.slice(taken[i].length));
+  let deficit = Math.min(count, byTier.flat().length) - taken.flat().length;
   let cursor = 0;
   while (deficit > 0 && cursor < leftovers.length) {
     const i = leftovers[cursor++];
-    const tier = TIER_ORDER.indexOf((pool[i].tier || "").toUpperCase());
-    taken[tier < 0 ? 2 : tier].push(i);
+    const at = Math.max(0, level.tiers.indexOf((pool[i].tier || "").toUpperCase()));
+    taken[at].push(i);
     deficit--;
   }
 

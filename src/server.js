@@ -7,8 +7,8 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import QRCode from "qrcode";
 
-import { MAX_TRIES, clientMeta, validatePuzzles, buildSequence, expectedOverlap, TIER_ORDER, COUNT_CHOICES, DEMO } from "./words.js";
-import { mark, resultCode, rowMs, compareEntries } from "./game.js";
+import { MAX_TRIES, clientMeta, validatePuzzles, buildSequence, expectedOverlap, tierTargets, LEVELS, levelById, TIER_ORDER, COUNT_CHOICES, DEMO } from "./words.js";
+import { mark, resultCode, rowMs, compareEntries, scoreRow, SCORING } from "./game.js";
 import {
   requireAdmin, verifyAdmin, parseCookies, authMode, sealedMessage, passwordInfo,
   passwordConfigured, accessConfigured, insecureLocal,
@@ -140,7 +140,7 @@ function playerPuzzles(player, round, pool) {
   try { seq = JSON.parse(player.sequence || "[]"); } catch (e) { seq = []; }
   seq = seq.filter((i) => Number.isInteger(i) && i >= 0 && i < pool.length);
   if (!seq.length) {
-    seq = buildSequence(pool, round.question_count);
+    seq = buildSequence(pool, round.question_count, Math.random, round.level);
     store.setPlayerSequence(player.id, seq);
   }
   return seq.map((i) => pool[i]);
@@ -161,7 +161,7 @@ function playerState(player, round, pool) {
   const limitMs = round.limit_ms;
 
   const results = [];
-  let solved = 0, guesses = 0, totalMs = 0;
+  let solved = 0, guesses = 0, totalMs = 0, score = 0;
   for (let i = 0; i < puzzles.length; i++) {
     const r = rows.get(i);
     results.push(resultCode(r));
@@ -169,6 +169,7 @@ function playerState(player, round, pool) {
       if (r.status === "win") solved++;
       guesses += r.tries;
       totalMs += rowMs(r, now, limitMs);
+      score += scoreRow(r);
     }
   }
 
@@ -241,6 +242,7 @@ function playerState(player, round, pool) {
     solved,
     guesses,
     totalMs,
+    score,
     results,
     current,
     isLast: idx === puzzles.length - 1,
@@ -260,7 +262,7 @@ function buildBoard() {
   const count = round.question_count;
   const entries = store.roundPlayers(round.id).map((p) => {
     const rows = store.allRows(p.id);
-    let solved = 0, guesses = 0, totalMs = 0, closedCount = 0;
+    let solved = 0, guesses = 0, totalMs = 0, closedCount = 0, score = 0;
     const results = new Array(count).fill(0);
     for (const r of rows) {
       if (r.puzzle_idx >= count) continue;
@@ -269,6 +271,7 @@ function buildBoard() {
       if (r.status !== "open") closedCount++;
       guesses += r.tries;
       totalMs += rowMs(r, now, round.limit_ms);
+      score += scoreRow(r);
     }
     const current = rows.find((r) => r.puzzle_idx === p.idx && r.status === "open") || null;
     return {
@@ -278,6 +281,7 @@ function buildBoard() {
       solved,
       guesses,
       totalMs,
+      score,
       results,
       skips: p.skips_used || 0,
       reveals: p.reveals_used || 0,
@@ -307,6 +311,11 @@ function buildBoard() {
     revealCostMs: revealCost(round),
     helpLevel: round.help_level,
     helpLevels: Object.entries(HELP_LEVELS).map(([id, h]) => ({ id, label: h.label, blurb: h.blurb, free: h.free })),
+    level: round.level,
+    levels: LEVELS.map((l) => ({
+      ...l,
+      available: tierTargets(puzzles, round.question_count, l.id).reduce((a, t) => a + t.have, 0),
+    })),
     limitMs: round.limit_ms,
     puzzleCount: count,
     poolSize: puzzles.length,
@@ -315,9 +324,10 @@ function buildBoard() {
       have: puzzles.filter((p) => (p.tier || "").toUpperCase() === tier).length,
     })),
     demo: DEMO,
+    scoring: SCORING,
     build: BUILD,
     /* So the host can see whether the pool is deep enough for the length chosen. */
-    expectedShared: Math.round(expectedOverlap(puzzles, count) * 10) / 10,
+    expectedShared: Math.round(expectedOverlap(puzzles, count, round.level) * 10) / 10,
     maxTries: MAX_TRIES,
     serverNow: now,
     startedAt: round.started_at,
@@ -559,6 +569,19 @@ app.post("/api/next", (req, res) => {
 
 app.get("/api/admin/board", requireAdmin, (req, res) => res.json(buildBoard()));
 
+app.post("/api/admin/level", requireAdmin, (req, res) => {
+  const round = store.activeRound();
+  if (round.phase === "running") {
+    return res.status(409).json({ error: "round_running", message: "The level can only change in the lobby. Reset first." });
+  }
+  const id = Number(req.body?.level);
+  if (!LEVELS.some((l) => l.id === id)) return res.status(400).json({ error: "bad_level" });
+  store.setRoundLevel(round.id, id);
+  broadcastRound();
+  broadcastBoard();
+  res.json({ ok: true, level: id });
+});
+
 app.post("/api/admin/help", requireAdmin, (req, res) => {
   const level = String(req.body?.help || "");
   if (!HELP_LEVELS[level]) return res.status(400).json({ error: "bad_help" });
@@ -597,7 +620,7 @@ app.post("/api/admin/start", requireAdmin, (req, res) => {
   const ms = Number(req.body?.countdownMs);
   const countdownMs = COUNTDOWN_CHOICES.includes(ms) ? ms : round.countdown_ms;
   const pool = store.loadPuzzles();
-  const fresh = store.startRound(round.id, countdownMs, () => buildSequence(pool, round.question_count));
+  const fresh = store.startRound(round.id, countdownMs, () => buildSequence(pool, round.question_count, Math.random, round.level));
   broadcastRound();
   broadcastBoard();
   res.json({ ok: true, startsAt: fresh.starts_at, countdownMs });
@@ -629,7 +652,7 @@ app.post("/api/admin/reset", requireAdmin, (req, res) => {
      ejections do not haunt the next one. Removing someone still sticks for the
      rest of the round they were removed from. */
   store.clearBlocklist();
-  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count, old.skips_allowed, old.help_level);
+  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count, old.skips_allowed, old.help_level, old.level);
   /* Everyone is out, not merely cleared: every page returns to the join screen
      and has to opt back in. */
   broadcastAll({ type: "ejected", round: fresh.id });

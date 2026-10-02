@@ -36,7 +36,26 @@ export function rowMs(row, now, limitMs) {
   return limitMs ? Math.min(live, limitMs) : live;
 }
 
-/** Most words solved, then fastest total time, then fewest guesses. */
+/*
+ * Points for a solved word, so leaning on the aids costs something and two people
+ * on the same number of words are not equal. Letters the ROUND handed out are
+ * free -- everyone at that level got them -- and only the ones a player chose to
+ * take are charged. A solved word is always worth more than a missed one, however
+ * much help it needed.
+ */
+export const SCORING = { solved: 100, perSpareGuess: 10, perLetter: 15, perHint: 10, floor: 10 };
+
+export function scoreRow(row) {
+  if (!row || row.status !== "win") return 0;
+  let revealed = 0;
+  try { revealed = JSON.parse(row.revealed || "[]").length; } catch (e) { revealed = 0; }
+  const chosen = Math.max(0, revealed - (row.free_letters || 0));
+  const base = SCORING.solved + Math.max(0, MAX_TRIES - row.tries) * SCORING.perSpareGuess;
+  const cost = chosen * SCORING.perLetter + (row.big_hint ? SCORING.perHint : 0);
+  return Math.max(SCORING.floor, base - cost);
+}
+
+/** Points first, then the clock, then fewest guesses. */
 export function compareEntries(a, b) {
-  return (b.solved - a.solved) || (a.totalMs - b.totalMs) || (a.guesses - b.guesses);
+  return (b.score - a.score) || (a.totalMs - b.totalMs) || (a.guesses - b.guesses);
 }

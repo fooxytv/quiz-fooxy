@@ -28,6 +28,48 @@ Two things are deliberately kept out of the browser:
   is enforced there, so a fast total time cannot be faked. Since time decides the
   winner, this matters.
 
+## Levels
+
+A quiz nobody can answer is not fun, so the host picks which end of the pool a round
+draws on. Open on Level 1, and move up between rounds only if people are enjoying it.
+
+| | draws on | feels like |
+|---|---|---|
+| **Level 1** *(default)* | warm up + easy | everyone gets nearly all of them |
+| **Level 2** | easy + steady | a few make you think |
+| **Level 3** | steady + tricky | you need to have watched |
+| **Level 4** | tricky + hard | for the ones who know |
+| **Level 5** | hard + brutal | deliberately unkind |
+| **Mixed** | all six tiers | one round that ramps the whole way |
+
+**Nothing is ever removed from the word list.** The X-Men, the Secret Wars deep cuts
+and the Phase 4 names all stay; the level simply decides which tiers a round reaches
+into. The level is lobby-only, since changing it mid-round would mean redrawing
+sequences people are partway through.
+
+The easy end is deliberately all Infinity Saga — Iron Man through Endgame — and
+includes real surnames like Stark, Rogers, Banner, Parker, Barton and Romanoff,
+because those are satisfying to get.
+
+## Points
+
+Ranking is on **points**, then time, then fewest guesses — so leaning on the aids
+costs you, and two people on the same number of words are not equal.
+
+| | |
+|---|---|
+| a solved word | 100 |
+| each guess you did not need | +10 |
+| a letter you chose to take | −15 |
+| a bigger hint | −10 |
+| letters the level handed out | free — everyone got them |
+
+A solve never drops below 10, so it always beats a miss however much help it needed.
+A first-guess solve unaided is 150.
+
+The leaderboard re-sorts **live** as the clocks tick, not only when someone acts, and
+a row flashes green when it moves up. The heading names whoever is leading.
+
 ## Help, for when the words are too hard
 
 The brutal tier is genuinely brutal, so how much help a round gives is **one
@@ -65,9 +107,9 @@ limits run up to five minutes.
 
 ## How a session runs
 
-A pool of 126 words in six tiers — **warm up, easy, steady, tricky, hard,
-brutal** — MCU, X-Men, and the deep Secret Wars and Battleworld corners — and the host
-picks how many questions a round runs to (5, 10, 15, 20,
+A pool of 135 words in six tiers — **warm up, easy, steady, tricky, hard,
+brutal** — MCU, X-Men, and the deep Secret Wars and Battleworld corners — and the host picks
+both the **level** and how many questions a round runs to (5, 10, 15, 20,
 25 or 30). Answers are 3 to 12 letters; the grid tightens its spacing and type to
 fit even SVARTALFHEIM on a phone.
 
@@ -470,7 +512,8 @@ account.
 
 1. Open `/admin`, leave it on **Join screen**, and project it. Turn **Sound on**
    if the screen has speakers.
-2. People scan the QR, type a name, and land in the lobby. Names appear as they
+2. People scan the QR, type a name, and land in the lobby. **Show QR** (or the
+   **Q** key) throws it full screen from either tab, for latecomers. Names appear as they
    arrive. Nobody's clock is running.
 3. Set **questions per round** (lobby only — it is locked once a round is under
    way). The panel shows how deep each tier is and how much two players will

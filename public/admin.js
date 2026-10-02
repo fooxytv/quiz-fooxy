@@ -70,6 +70,16 @@
     return p.totalMs - Math.min(Math.max(0, snapshot), cap) + Math.min(Math.max(0, live), cap);
   }
 
+  /*
+   * The server sorts too, but it only sorts when something happens. Times tick on
+   * every frame here, so the order is recomputed locally as well -- otherwise
+   * someone overtaking on the clock would not move until the next player action.
+   */
+  function ranked() {
+    return (board.players || []).slice().sort((a, b) =>
+      (b.score - a.score) || (liveMs(a) - liveMs(b)) || (a.guesses - b.guesses));
+  }
+
   function setStatus() {
     const pill = $("statusPill"), txt = $("statusText");
     pill.className = "pill" + (connected ? " live" : " warn");
@@ -162,7 +172,17 @@
     const shared = board.expectedShared || 0;
     const pct = board.puzzleCount ? Math.round((shared / board.puzzleCount) * 100) : 0;
     return `<div class="settings">
-      <h4>Questions per round</h4>
+      <h4>Level</h4>
+      <p class="meta" style="margin:0">Start on Level 1 and move up between rounds if people are enjoying it. Nothing is ever removed from the word list &mdash; the level just decides which end of it a round draws on.</p>
+      <div class="seg" style="margin:10px 0 0" role="group" aria-label="Level">
+        ${(board.levels || []).map((l) => `<button data-level="${l.id}" aria-pressed="${l.id === board.level}" type="button" ${board.phase === "running" ? "disabled" : ""}>${esc(l.label)}</button>`).join("")}
+      </div>
+      <p class="meta" style="margin:8px 0 0">${(() => {
+        const l = (board.levels || []).find((x) => x.id === board.level);
+        return l ? `<b>${esc(l.name)}</b> &mdash; draws on ${esc(l.tiers.join(" and "))}, ${l.available} words to choose from.` : "";
+      })()}</p>
+
+      <h4 style="margin-top:14px">Questions per round</h4>
       <p class="meta" style="margin:0">Each player gets their own draw from the pool of ${board.poolSize}, climbing the same difficulty curve on different words &mdash; so the person beside you is not on the same question.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Questions per round">
         ${(board.countChoices || []).map((n) => `<button data-count="${n}" aria-pressed="${n === board.puzzleCount}" type="button" ${running ? "disabled" : ""}>${n}</button>`).join("")}
@@ -262,6 +282,15 @@
         hostMsg(e.message, "err");
       }
     };
+
+    root.querySelectorAll("[data-level]").forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.level);
+        if (id === board.level) return;
+        try { await api("/api/admin/level", { method: "POST", body: { level: id } }); hostMsg("Level changed. Everyone waiting gets a fresh draw.", "ok"); }
+        catch (e) { hostMsg(e.message, "err"); }
+      };
+    });
 
     root.querySelectorAll("[data-count]").forEach((b) => {
       b.onclick = async () => {
@@ -397,6 +426,7 @@
           <div class="qrwhite"><div id="qrbox"><img alt="QR code that opens the quiz" src="/api/admin/qr.svg?url=${encodeURIComponent(url)}"></div></div>
           <p class="qrurl">${esc(url)}</p>
           <div class="row" style="margin-top:10px">
+            <button class="btn sm" id="bigQrBtn2" type="button">Show full screen</button>
             <a class="btn ghost sm" href="${esc(url)}" target="_blank" rel="noopener">Open it</a>
             <button class="btn ghost sm" id="copyLink" type="button">Copy link</button>
           </div>
@@ -441,6 +471,8 @@
       ${blockedMarkup()}
       ${hostbarMarkup()}`;
 
+    const qb2 = $("bigQrBtn2");
+    if (qb2) qb2.onclick = () => showQR(true);
     const cp = $("copyLink");
     cp.onclick = async () => {
       try { await navigator.clipboard.writeText(url); cp.textContent = "Copied"; }
@@ -462,7 +494,7 @@
 
   function renderBoard() {
     setArt(false);
-    const list = board.players;
+    const list = ranked();
     const finished = list.filter((p) => p.done).length;
     const cracked = list.reduce((a, p) => a + p.solved, 0);
     const top3 = list.slice(0, 3);
@@ -470,7 +502,8 @@
     view.innerHTML = `
       ${goStripMarkup()}
       <div class="board-head">
-        <h2>Live standings</h2>
+        <h2>${list.length ? `${esc(nameOf(list[0]))} leads` : "Live standings"}</h2>
+        <button class="btn ghost sm" id="bigQrBtn" type="button">Show QR</button>
         <button class="btn ghost sm" id="focusBtn" type="button">Focus</button>
         <span class="spacer"></span>
         <div class="statrow">
@@ -484,17 +517,19 @@
         <div class="pod p${n + 1}">
           <div class="pos">${["1st", "2nd", "3rd"][n]}${p.done ? " &middot; finished" : ""}</div>
           <div class="nm">${esc(p.name)}</div>
-          <div class="ln"><span>Solved <b>${p.solved}/${board.puzzleCount}</b></span><span>Time <b data-pid="${esc(p.id)}">${fmt(liveMs(p))}</b></span></div>
+          <div class="ln"><span>Points <b>${p.score}</b></span><span>Solved <b>${p.solved}/${board.puzzleCount}</b></span></div>
+          <div class="ln" style="margin-top:4px"><span>Time <b data-pid="${esc(p.id)}">${fmt(liveMs(p))}</b></span>${p.reveals || p.hints ? `<span>Used <b>${(p.reveals || 0) + (p.hints || 0)}</b></span>` : ""}</div>
         </div>`).join("")}</div>` : ""}
 
       <div class="table-scroll">
         ${list.length ? `<table class="board">
-          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters taken">Letters</th><th title="Bigger hints asked for">Hints</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Points</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters taken beyond the free ones">Letters</th><th title="Bigger hints asked for">Hints</th><th></th></tr></thead>
           <tbody>${list.map((p, n) => `<tr>
             <td class="rank mono-num ${n === 0 ? "top" : ""}">${n + 1}</td>
             <td><div class="who-name">${esc(p.name)}</div><div class="who-sub">${board.phase !== "running" ? "In the lobby" : (p.done ? "Finished" : (p.online ? "On puzzle " + (p.idx + 1) : "Away &middot; puzzle " + (p.idx + 1)))}${p.late ? `<span class="golate" title="Joined after the go, so their clock started later">late</span>` : ""}</div></td>
             <td><div class="pips">${p.results.map((v, i) => `<div class="${pipClass(v, i, p.idx, p.done)}" title="Puzzle ${i + 1}"></div>`).join("")}</div></td>
-            <td class="score mono-num">${p.solved}</td>
+            <td class="score mono-num">${p.score}</td>
+            <td class="mono-num" style="color:var(--muted)">${p.solved}/${board.puzzleCount}</td>
             <td class="t-cell ${p.done ? "done" : ""}" data-pid="${esc(p.id)}">${fmt(liveMs(p))}</td>
             <td class="mono-num" style="color:var(--muted)">${p.guesses}</td>
             <td class="mono-num"><span class="useno ${p.skips ? "used" : ""}">${p.skips || 0}</span></td>
@@ -519,12 +554,36 @@
         ${settingsMarkup()}
         ${blockedMarkup()}
         ${hostbarMarkup()}
-        <div class="notice">Ranking: most words solved, then fastest total time, then fewest guesses. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.
+        <div class="notice">Ranking: <b>points</b>, then fastest time, then fewest guesses. A solved word is worth ${(board.scoring || {}).solved || 100}, plus ${(board.scoring || {}).perSpareGuess || 10} for each guess you did not need. A letter you chose to take costs ${(board.scoring || {}).perLetter || 15} and a bigger hint ${(board.scoring || {}).perHint || 10} &mdash; the letters the level hands out are free. A solve never drops below ${(board.scoring || {}).floor || 10}, so it always beats a miss. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.
         <span style="opacity:.55">Running build <b>${esc((board.build && board.build.sha) || "dev")}</b>, made ${esc((board.build && board.build.at) || "?")}. If that is not your latest commit, rebuild: <code>./scripts/local.sh</code></span></div>
       </div>`;
     const fb = $("focusBtn");
     if (fb) fb.onclick = () => setFocus(true);
+    const qb = $("bigQrBtn");
+    if (qb) qb.onclick = () => showQR(true);
     wireControls(view);
+  }
+
+  /*
+   * The QR used to live only on the Join screen, which the host view leaves as soon
+   * as a round starts -- so the one thing latecomers need was behind a tab change.
+   * This puts it on the whole display from either tab.
+   */
+  function showQR(on) {
+    let el = $("qrFull");
+    if (!on) { if (el) el.remove(); return; }
+    if (el) return;
+    const url = (board && board.publicUrl) || location.origin;
+    el = document.createElement("div");
+    el.id = "qrFull";
+    el.innerHTML = `
+      <div class="qrfull-inner">
+        <div class="qrfull-code"><img alt="QR code to join the quiz" src="/api/admin/qr.svg?url=${encodeURIComponent(url)}"></div>
+        <div class="qrfull-url">${esc(url)}</div>
+        <div class="qrfull-hint">Scan to play &middot; press anywhere to close</div>
+      </div>`;
+    el.onclick = () => showQR(false);
+    document.body.appendChild(el);
   }
 
   /*
@@ -547,7 +606,9 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && document.body.classList.contains("focus-board")) setFocus(false);
+    if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
+    if (e.key === "Escape") { showQR(false); if (document.body.classList.contains("focus-board")) setFocus(false); }
+    if (e.key.toLowerCase() === "q" && !e.metaKey && !e.ctrlKey) showQR(!$("qrFull"));
     if (e.key.toLowerCase() === "f" && tab === "board" && !e.metaKey && !e.ctrlKey
         && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
       setFocus(!document.body.classList.contains("focus-board"));
@@ -664,6 +725,8 @@
   $("tabThemes").onclick = () => { tab = "themes"; paint(); };
 
   /* Patch only the time cells each second, so the QR never flickers. */
+  let shownOrder = [];
+
   setInterval(() => {
     if (!board || tab === "words" || tab === "themes") return;
 
@@ -671,6 +734,23 @@
       const p = board.players.find((x) => x.id === el.dataset.pid);
       if (p) el.textContent = fmt(liveMs(p));
     });
+
+    /* Re-sort as the clocks move, and only redraw when the order really changed. */
+    if (tab === "board") {
+      const order = ranked().map((p) => p.id).join(",");
+      if (order !== shownOrder.join(",")) {
+        const was = shownOrder;
+        shownOrder = order ? order.split(",") : [];
+        renderBoard();
+        shownOrder.forEach((id, i) => {
+          const before = was.indexOf(id);
+          if (before > i) {
+            const row = view.querySelector(`tr [data-pid="${CSS.escape(id)}"]`)?.closest("tr");
+            if (row) { row.classList.add("movedup"); setTimeout(() => row.classList.remove("movedup"), 1200); }
+          }
+        });
+      }
+    }
 
     if (board.phase === "running" && board.startsAt) {
       const left = board.startsAt - now();
@@ -697,6 +777,7 @@
     if (!next) return;
     clockSkew = next.serverNow - Date.now();
     board = next;
+    shownOrder = ranked().map((p) => p.id);
     /* The host clicked Go to watch, so bring the leaderboard up once. */
     if (board.phase === "running" && !autoFlipped) {
       autoFlipped = true;
