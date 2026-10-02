@@ -492,3 +492,51 @@ body:not(.art-on) #introCard{display:none}
   :root[data-scene="comic"] .table-scroll{box-shadow:4px 4px 0 var(--panel-shadow)}
   :root[data-scene="comic"] .intro-title .ch{-webkit-text-stroke:2px var(--ink);text-shadow:4px 4px 0 var(--red)}
 }
+
+/* ---------- bought letters + lifelines ---------- */
+.known{display:flex;gap:4px;justify-content:center;margin:0 0 12px;flex-wrap:wrap}
+.known .kn{
+  min-width:20px;height:26px;padding:0 3px;display:flex;align-items:center;justify-content:center;
+  border-bottom:3px solid var(--hair);font-weight:900;font-size:16px;color:var(--muted);
+  text-transform:uppercase;font-variant-numeric:tabular-nums;
+}
+.known .kn.on{border-bottom-color:var(--gold);color:var(--gold)}
+.lifelines{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;
+  padding-top:12px;border-top:2px dashed var(--hair)}
+.lifelines .btn{gap:7px}
+.lifelines .cost{
+  font-family:"Chivo",sans-serif;font-weight:900;font-size:10px;letter-spacing:.08em;
+  border:1.5px solid currentColor;border-radius:999px;padding:1px 6px;opacity:.75;
+}
+.lifelines .btn.armed{background:var(--red);border-color:var(--red);color:#FFF}
+.pip.skip{background:repeating-linear-gradient(135deg,var(--muted) 0 3px,transparent 3px 6px);border-color:var(--muted)}
+.useno{display:inline-block;min-width:20px;text-align:center;font-weight:700;color:var(--muted)}
+.useno.used{color:var(--gold);font-weight:900}
+
+/* ---------- focus mode: the board alone, scaled for a shared screen ---------- */
+body.focus-board .topbar,
+body.focus-board .seg,
+body.focus-board .gostrip,
+body.focus-board .hideinfocus{display:none!important}
+body.focus-board main{max-width:none;padding:22px 26px}
+body.focus-board .board-head h2{font-size:44px}
+body.focus-board #focusBtn{display:none}
+body.focus-board .stat b{font-size:34px}
+body.focus-board table.board th{font-size:12px;padding:12px}
+body.focus-board table.board td{padding:14px 12px}
+body.focus-board .who-name{font-size:21px;max-width:none}
+body.focus-board .who-sub{font-size:13px}
+body.focus-board .score{font-size:34px}
+body.focus-board .t-cell{font-size:22px}
+body.focus-board .pip{width:20px;height:28px}
+body.focus-board .pod .nm{font-size:34px}
+body.focus-board .useno{font-size:19px}
+#exitFocus{
+  position:fixed;right:16px;bottom:16px;z-index:40;
+  appearance:none;cursor:pointer;border:2px solid var(--ink);border-radius:2px;
+  background:var(--surface);color:var(--ink);opacity:.35;
+  font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:14px;
+  letter-spacing:.09em;text-transform:uppercase;padding:7px 13px;
+  padding-bottom:calc(7px + env(safe-area-inset-bottom,0px));
+}
+#exitFocus:hover,#exitFocus:focus-visible{opacity:1}

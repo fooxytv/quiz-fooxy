@@ -45,7 +45,7 @@
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.3;
+    master.gain.value = 0.45;
     master.connect(ctx.destination);
     return ctx;
   }
@@ -258,13 +258,25 @@
     } else {
       if (ensure()) {
         if (ctx.state === "suspended") ctx.resume();
-        master.gain.value = 0.3;
+        master.gain.value = 0.45;
       }
     }
     return enabled;
   }
 
-  /** The header control. `onLobby` says whether the bed should resume when unmuted. */
+  /** A short rising confirmation, so switching it on is audibly obvious. */
+  function confirmOn() {
+    const t = at0();
+    if (t === null) return;
+    [0, 5, 12].forEach((n, i) => blip(semi(523.25, n), t + i * 0.07, 0.14, 0.2, "triangle"));
+  }
+
+  /**
+   * The header control. `wantsLobby` says whether the bed should be playing right
+   * now -- checked on every press, not only at render, so switching sound on
+   * while the lobby is already up starts the music rather than waiting for the
+   * next repaint.
+   */
   function button(el, wantsLobby) {
     if (!el) return;
     const paint = () => {
@@ -274,10 +286,13 @@
     el.onclick = () => {
       setOn(!enabled);
       paint();
-      if (enabled && wantsLobby && wantsLobby()) lobbyStart();
+      if (enabled) {
+        confirmOn();
+        if (wantsLobby && wantsLobby()) lobbyStart();
+      }
     };
     paint();
   }
 
-  window.Sfx = { isOn, setOn, button, lobbyStart, lobbyStop, tick, go, solve, fail, key };
+  window.Sfx = { isOn, setOn, button, confirmOn, lobbyStart, lobbyStop, tick, go, solve, fail, key };
 })();

@@ -17,10 +17,11 @@ export function mark(guess, answer) {
   return out;
 }
 
-/** -1 missed, 0 not reached, 1..MAX_TRIES solved in that many guesses. */
+/** -2 skipped, -1 missed, 0 not reached, 1..MAX_TRIES solved in that many guesses. */
 export function resultCode(row) {
   if (!row || row.status === "open") return 0;
-  return row.status === "win" ? Math.max(1, Math.min(MAX_TRIES, row.tries)) : -1;
+  if (row.status === "win") return Math.max(1, Math.min(MAX_TRIES, row.tries));
+  return row.skipped ? -2 : -1;
 }
 
 /**

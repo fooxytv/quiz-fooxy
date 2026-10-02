@@ -28,6 +28,27 @@ Two things are deliberately kept out of the browser:
   is enforced there, so a fast total time cannot be faked. Since time decides the
   winner, this matters.
 
+## Lifelines
+
+Some of the brutal tier is genuinely brutal, so there are two ways out of a word,
+with different prices:
+
+- **Buy a letter** — reveals one correct letter in position, and charges time.
+  The cost is a sixth of the per-word limit (15s at 90s, minimum 10s), taken by
+  moving that word's start time *backwards*: one mechanism that both shortens the
+  time left and lengthens the time recorded. Unlimited, because the cost
+  self-limits, and it never hands over the last unknown letter — the word still
+  has to be typed.
+- **Skip it** — gives the word up. It counts as missed and spends one of a
+  limited few (host sets 0–5, default 3). The real price is the lost solve, since
+  solved count outranks time; it needs two taps to confirm.
+
+Both show on the leaderboard as their own columns, with skipped words getting a
+hatched pip distinct from a plain miss, so you can see who leaned on what.
+
+Per-word limits now run up to five minutes, since a brutal word plus a couple of
+bought letters needs room.
+
 ## How a session runs
 
 A pool of 126 words in six tiers — **warm up, easy, steady, tricky, hard,
@@ -125,8 +146,9 @@ nothing is sampled, traced or transcribed from anyone's property.
   on top of that sit countdown pips, a hit on the go, and short stings for a
   solve or a miss.
 
-**Sound is off until someone turns it on**, and the choice is remembered per
-device. The full lobby bed plays only on the **host** screen, which is the one
+**Sound is off until someone turns it on** — the button is in the header, and
+switching it on plays a short rising chime so you know it took. The choice is
+remembered per device. The full lobby bed plays only on the **host** screen, which is the one
 wired to the room's speakers; players' phones get the short effects only, because
 a dozen handsets playing the same loop a few milliseconds apart sounds like a
 fault. There is a Sound button in the header of both pages.
@@ -333,11 +355,14 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 | `GET /api/state` | resume after a reload or a dropped connection |
 | `POST /api/guess` | `{guess}` → marks, tries left, answer once finished |
 | `POST /api/next` | advance, stamping the next word's start time |
+| `POST /api/reveal` | buy one letter, paid for in time |
+| `POST /api/skip` | give the word up, spending one skip |
 | `WS /ws` | round and removal events |
 | `GET /api/admin/board` | full leaderboard |
 | `POST /api/admin/start` | `{countdownMs}` → leaves the lobby on a shared instant |
 | `POST /api/admin/count` | `{count}` → questions per round, lobby only |
-| `POST /api/admin/limit` | `{limitMs}` |
+| `POST /api/admin/limit` | `{limitMs}` up to five minutes |
+| `POST /api/admin/skips` | `{skips}` 0&ndash;5 per player |
 | `POST /api/admin/reset` | new round, board wiped |
 | `POST /api/admin/kick` / `unkick` | `{playerId}` |
 | `POST /api/admin/clear-removed` | empty the removed list without resetting |
@@ -360,7 +385,7 @@ throws, which is how residue got left the first time.
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-Ninety-nine checks against a live server (`test/smoke.mjs`), driving two players at
+A hundred and fourteen checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the

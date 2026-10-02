@@ -24,6 +24,8 @@
   let lastPhase = null;    // to fire the go sting exactly once
   let lastOutcome = -1;    // puzzle index whose result has already been celebrated
   let wasEjected = false;  // the host reset while we were in, so say so
+  let autoNextFor = -1;    // index already queued to advance, so it fires once
+  let autoNextTimer = 0;
 
   const $ = (id) => document.getElementById(id);
   const view = $("view");
@@ -76,6 +78,8 @@
    * the lobby under their old name.
    */
   function onEjected() {
+    clearTimeout(autoNextTimer);
+    autoNextFor = -1;
     hadJoined = false;
     wasEjected = true;
     typed = "";
@@ -242,6 +246,12 @@
             </div>
           </div>
           ${state.limitMs && !closed ? `<div class="tbar ${barClass()}" id="tbar"><i style="width:${barPct()}%"></i></div>` : ""}
+          ${!closed && c.revealed && c.revealed.length ? `<div class="known" aria-label="Letters you have bought">
+            ${Array.from({ length: c.length }, (_, i) => {
+              const hit = c.revealed.find((r) => r.i === i);
+              return `<span class="kn ${hit ? "on" : ""}">${hit ? esc(hit.ch) : ""}</span>`;
+            }).join("")}
+          </div>` : ""}
           <div class="grid" id="grid" style="--len:${c.length}">${gridRows()}</div>
           <p class="toast" id="toast"></p>
           ${closed ? outcome() : keyboard()}
@@ -263,15 +273,49 @@
       }
     }
     if (closed) {
-      $("nextBtn").onclick = async () => {
+      $("nextBtn").onclick = goNext;
+      /*
+       * A solved word carries straight on: you already know you were right, and
+       * the trivia is still readable on the way past. A missed one waits for a
+       * press, because that is the answer you actually wanted to read.
+       */
+      if (c.status === "win" && !state.isLast && autoNextFor !== c.index) {
+        autoNextFor = c.index;
+        clearTimeout(autoNextTimer);
+        autoNextTimer = setTimeout(goNext, 2600);
+      }
+    } else {
+      view.querySelectorAll(".key").forEach((b) => { b.onclick = () => press(b.dataset.key); });
+
+      const rv = $("revealBtn");
+      if (rv) rv.onclick = async () => {
         if (busy) return;
-        busy = true;
-        try { typed = ""; adopt(await api("/api/next", {})); focusFirstKey(); }
+        busy = true; rv.disabled = true;
+        try { adopt(await api("/api/reveal", {})); window.Sfx?.key(); }
         catch (e) { toast(e.message); }
         finally { busy = false; }
       };
-    } else {
-      view.querySelectorAll(".key").forEach((b) => { b.onclick = () => press(b.dataset.key); });
+
+      const sk = $("skipBtn");
+      if (sk) {
+        let armed = false, timer = 0;
+        sk.onclick = async () => {
+          if (busy) return;
+          if (!armed) {
+            armed = true;
+            sk.classList.add("armed");
+            sk.innerHTML = "Tap again to give up";
+            clearTimeout(timer);
+            timer = setTimeout(() => { armed = false; render(); }, 5000);
+            return;
+          }
+          clearTimeout(timer);
+          busy = true; sk.disabled = true;
+          try { typed = ""; adopt(await api("/api/skip", {})); window.Sfx?.fail(); }
+          catch (e) { toast(e.message); }
+          finally { busy = false; }
+        };
+      }
     }
   }
 
@@ -314,21 +358,61 @@
     }).join("")}</div>`).join("")}</div>`;
   }
 
+  /*
+   * Two ways out of a word you cannot get. A reveal keeps you in it and charges
+   * time; a skip abandons it and spends one of a limited few. Giving up a solve
+   * is the real cost of a skip, since solved count outranks time.
+   */
+  function lifelines() {
+    const c = state.current;
+    const cost = Math.round((state.revealCostMs || 15000) / 1000);
+    const left = state.skipsLeft ?? 0;
+    const allowed = state.skipsAllowed ?? 0;
+    return `<div class="lifelines">
+      <button class="btn ghost sm" id="revealBtn" type="button" ${c.canReveal ? "" : "disabled"}>
+        Buy a letter <span class="cost">&minus;${cost}s</span>
+      </button>
+      ${allowed > 0 ? `<button class="btn ghost sm" id="skipBtn" type="button" ${left > 0 ? "" : "disabled"}>
+        Skip it <span class="cost">${left} left</span>
+      </button>` : ""}
+      <p class="meta" style="flex:1 1 100%;margin:2px 0 0">
+        A letter costs ${cost} seconds off this word's clock. Skipping gives the word up for lost &mdash; it counts as missed, and solved words outrank time.
+      </p>
+    </div>`;
+  }
+
+  async function goNext() {
+    if (busy) return;
+    clearTimeout(autoNextTimer);
+    busy = true;
+    try {
+      typed = "";
+      adopt(await api("/api/next", {}));
+      focusFirstKey();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      busy = false;
+    }
+  }
+
   function outcome() {
     const c = state.current;
     const won = c.status === "win";
     return `<div class="outcome">
       <div class="cat" style="color:${won ? "var(--green)" : "var(--red)"}">
         ${won ? `Solved in ${c.tries} ${c.tries === 1 ? "guess" : "guesses"} &middot; ${fmt(c.ms)}`
-              : c.timedOut ? "Time ran out" : "Out of guesses"}
+              : c.skipped ? "Skipped" : c.timedOut ? "Time ran out" : "Out of guesses"}
       </div>
       <div class="answer-shout">${esc(c.answer || "")}</div>
       ${c.fact ? `<div class="fact">${esc(c.fact)}</div>` : ""}
       <div class="row">
-        <button class="btn" id="nextBtn" type="button">${state.isLast ? "Finish" : "Next puzzle"}</button>
+        <button class="btn" id="nextBtn" type="button">${state.isLast ? "Finish" : (won ? "Go now" : "Next puzzle")}</button>
         <span class="meta mono-num">${state.solved}/${state.puzzleCount} solved &middot; ${fmt(state.totalMs)} on the clock</span>
       </div>
-      ${state.isLast ? "" : `<p class="meta" style="margin:10px 0 0">The clock for the next word starts when you press this.</p>`}
+      ${state.isLast ? "" : `<p class="meta" style="margin:10px 0 0">${won
+        ? "Carrying on by itself in a moment &mdash; no clock is running until the next word appears."
+        : "The clock for the next word starts when you press this."}</p>`}
     </div>`;
   }
 
@@ -458,10 +542,11 @@
   }, 120);
 
   setInterval(() => {
-    if (!state || !state.joined || state.done || state.removed) return;
-    if (state.waiting || state.counting) return;
+    /* Derived from the puzzle in hand rather than a flag, so a payload missing a
+       field can never freeze the clocks again. */
+    if (!state || state.removed || state.waiting || state.counting) return;
     const c = state.current;
-    if (!c || c.status !== "open") return;
+    if (!c || c.status !== "open" || !c.startedAt) return;
 
     const self = $("selfClock");
     if (self) self.textContent = fmt(liveTotal());
@@ -539,6 +624,8 @@
 
   const em = $("emblem");
   if (em) em.innerHTML = window.ComicArt?.emblem(26) || "";
+  /* No lobby bed on a player's device -- a dozen handsets looping the same music
+     a few milliseconds apart sounds like a fault. They get the effects. */
   window.Sfx?.button($("soundBtn"), () => false);
 
   setStatus();

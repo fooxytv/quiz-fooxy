@@ -167,6 +167,11 @@
       ${running
         ? `<p class="meta" style="margin:10px 0 0">Locked while a round is under way &mdash; reset to change it.</p>`
         : `<p class="meta" style="margin:10px 0 0">At ${board.puzzleCount} questions two players will have roughly <b>${shared} words in common</b> (${pct}% of the round), because some tiers are shallow. Shorter rounds overlap less; adding words to the thin tiers below helps most.</p>`}
+      <h4 style="margin-top:14px">Skips per player</h4>
+      <p class="meta" style="margin:0">A skip gives a word up for lost. It counts as missed, so it costs a solve &mdash; which outranks any time saved. Buying a letter is unlimited instead, and costs <b>${Math.round((board.revealCostMs || 15000) / 1000)}s</b> off that word's clock each time.</p>
+      <div class="seg" style="margin:10px 0 0" role="group" aria-label="Skips per player">
+        ${(board.skipChoices || []).map((n) => `<button data-skips="${n}" aria-pressed="${n === board.skipsAllowed}" type="button">${n === 0 ? "None" : n}</button>`).join("")}
+      </div>
       <div class="tierbars">
         ${(board.poolTiers || []).map((t) => `<span class="tierbar"><b>${esc(t.tier)}</b><i>${t.have}</i></span>`).join("")}
       </div>
@@ -271,6 +276,16 @@
     if (cr) wireDanger(cr, "Tap again to clear", async () => {
       const out = await api("/api/admin/clear-removed", { method: "POST" });
       hostMsg(out.cleared ? `Cleared ${out.cleared} from the removed list.` : "Nothing to clear.", "ok");
+    });
+
+    root.querySelectorAll("[data-skips]").forEach((b) => {
+      b.onclick = async () => {
+        const n = Number(b.dataset.skips);
+        if (n === board.skipsAllowed) return;
+        root.querySelectorAll("[data-skips]").forEach((x) => x.setAttribute("aria-pressed", String(Number(x.dataset.skips) === n)));
+        try { await api("/api/admin/skips", { method: "POST", body: { skips: n } }); hostMsg(n ? `Players get ${n} skip${n === 1 ? "" : "s"}.` : "Skipping is off.", "ok"); }
+        catch (e) { hostMsg(e.message, "err"); }
+      };
     });
 
     const rb = root.querySelector("#resetBtn");
@@ -387,6 +402,7 @@
 
   function pipClass(v, i, cur, done) {
     if (v > 0) return v <= 2 ? "pip w1" : v <= 4 ? "pip w2" : "pip w3";
+    if (v === -2) return "pip skip";
     if (v === -1) return "pip lost";
     if (!done && i === cur) return "pip now";
     return "pip";
@@ -403,6 +419,7 @@
       ${goStripMarkup()}
       <div class="board-head">
         <h2>Live standings</h2>
+        <button class="btn ghost sm" id="focusBtn" type="button">Focus</button>
         <span class="spacer"></span>
         <div class="statrow">
           <div class="stat"><b class="mono-num">${list.length}</b><span>Playing</span></div>
@@ -420,7 +437,7 @@
 
       <div class="table-scroll">
         ${list.length ? `<table class="board">
-          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Solved</th><th>Time</th><th>Guesses</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters bought with time">Letters</th><th></th></tr></thead>
           <tbody>${list.map((p, n) => `<tr>
             <td class="rank mono-num ${n === 0 ? "top" : ""}">${n + 1}</td>
             <td><div class="who-name">${esc(p.name)}</div><div class="who-sub">${board.phase !== "running" ? "In the lobby" : (p.done ? "Finished" : (p.online ? "On puzzle " + (p.idx + 1) : "Away &middot; puzzle " + (p.idx + 1)))}${p.late ? `<span class="golate" title="Joined after the go, so their clock started later">late</span>` : ""}</div></td>
@@ -428,6 +445,8 @@
             <td class="score mono-num">${p.solved}</td>
             <td class="t-cell ${p.done ? "done" : ""}" data-pid="${esc(p.id)}">${fmt(liveMs(p))}</td>
             <td class="mono-num" style="color:var(--muted)">${p.guesses}</td>
+            <td class="mono-num"><span class="useno ${p.skips ? "used" : ""}">${p.skips || 0}</span></td>
+            <td class="mono-num"><span class="useno ${p.reveals ? "used" : ""}">${p.reveals || 0}</span></td>
             <td style="text-align:right"><button class="kick" data-kick="${esc(p.id)}" type="button">Remove</button></td>
           </tr>`).join("")}</tbody>
         </table>` : `<div class="empty-board"><strong>Nobody has joined yet</strong>Switch to the join screen and put the QR code up.</div>`}
@@ -438,15 +457,48 @@
         <span><i style="background:color-mix(in srgb,var(--green) 72%,var(--surface))"></i>3&ndash;4</span>
         <span><i style="background:var(--gold)"></i>5&ndash;6</span>
         <span><i style="background:var(--red)"></i>missed</span>
+        <span><i style="background:repeating-linear-gradient(135deg,var(--muted) 0 3px,transparent 3px 6px)"></i>skipped</span>
         <span><i style="border:2px solid var(--ink)"></i>in progress</span>
       </div>
 
-      ${settingsMarkup()}
-      ${blockedMarkup()}
-      ${hostbarMarkup()}
-      <div class="notice">Ranking: most words solved, then fastest total time, then fewest guesses. Times are measured and enforced on the server, and tick live while someone is mid-word.</div>`;
+      <div class="hideinfocus">
+        ${lengthMarkup()}
+        ${settingsMarkup()}
+        ${blockedMarkup()}
+        ${hostbarMarkup()}
+        <div class="notice">Ranking: most words solved, then fastest total time, then fewest guesses. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.</div>
+      </div>`;
+    const fb = $("focusBtn");
+    if (fb) fb.onclick = () => setFocus(true);
     wireControls(view);
   }
+
+  /*
+   * Focus mode strips everything but the board and scales it up, because this
+   * screen gets shared and the controls are nobody else's business.
+   */
+  function setFocus(on) {
+    document.body.classList.toggle("focus-board", !!on);
+    try { localStorage.setItem("marvelQuiz.focus", on ? "1" : "0"); } catch (e) {}
+    let exit = $("exitFocus");
+    if (on && !exit) {
+      exit = document.createElement("button");
+      exit.id = "exitFocus";
+      exit.type = "button";
+      exit.textContent = "Exit focus";
+      exit.onclick = () => setFocus(false);
+      document.body.appendChild(exit);
+    }
+    if (!on && exit) exit.remove();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.body.classList.contains("focus-board")) setFocus(false);
+    if (e.key.toLowerCase() === "f" && tab === "board" && !e.metaKey && !e.ctrlKey
+        && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
+      setFocus(!document.body.classList.contains("focus-board"));
+    }
+  });
 
   /* --------------------------------------------------------------- words --- */
 
@@ -624,6 +676,7 @@
 
   setStatus();
   window.Theme?.load();
+  try { if (localStorage.getItem("marvelQuiz.focus") === "1") setFocus(true); } catch (e) {}
   paint();
   api("/api/admin/board").then(adopt).catch((e) => {
     view.innerHTML = `<div class="panel panel-pad"><h2 style="font-size:25px">Admin sealed</h2><p class="meta" style="margin:8px 0 0">${esc(e.message)}</p></div>`;

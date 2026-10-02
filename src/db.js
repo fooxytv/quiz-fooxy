@@ -64,7 +64,8 @@ db.exec(`
     phase        TEXT NOT NULL DEFAULT 'lobby',
     starts_at    INTEGER,
     countdown_ms INTEGER NOT NULL DEFAULT 5000,
-    question_count INTEGER NOT NULL DEFAULT 20
+    question_count INTEGER NOT NULL DEFAULT 20,
+    skips_allowed  INTEGER NOT NULL DEFAULT 3
   );
   CREATE TABLE IF NOT EXISTS players (
     id        TEXT PRIMARY KEY,
@@ -74,7 +75,9 @@ db.exec(`
     last_seen INTEGER NOT NULL,
     idx       INTEGER NOT NULL DEFAULT 0,
     blocked   INTEGER NOT NULL DEFAULT 0,
-    sequence  TEXT
+    sequence  TEXT,
+    skips_used INTEGER NOT NULL DEFAULT 0,
+    reveals_used INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS players_round ON players(round_id);
   CREATE TABLE IF NOT EXISTS progress (
@@ -82,6 +85,8 @@ db.exec(`
     puzzle_idx INTEGER NOT NULL,
     status     TEXT NOT NULL DEFAULT 'open',
     timed_out  INTEGER NOT NULL DEFAULT 0,
+    skipped    INTEGER NOT NULL DEFAULT 0,
+    revealed   TEXT NOT NULL DEFAULT '[]',
     tries      INTEGER NOT NULL DEFAULT 0,
     guesses    TEXT NOT NULL DEFAULT '[]',
     started_at INTEGER,
@@ -110,6 +115,11 @@ ensureColumn("rounds", "countdown_ms", "countdown_ms INTEGER NOT NULL DEFAULT 50
 ensureColumn("blocklist", "name", "name TEXT");
 ensureColumn("rounds", "question_count", "question_count INTEGER NOT NULL DEFAULT 20");
 ensureColumn("players", "sequence", "sequence TEXT");
+ensureColumn("rounds", "skips_allowed", "skips_allowed INTEGER NOT NULL DEFAULT 3");
+ensureColumn("players", "skips_used", "skips_used INTEGER NOT NULL DEFAULT 0");
+ensureColumn("progress", "skipped", "skipped INTEGER NOT NULL DEFAULT 0");
+ensureColumn("progress", "revealed", "revealed TEXT NOT NULL DEFAULT '[]'");
+ensureColumn("players", "reveals_used", "reveals_used INTEGER NOT NULL DEFAULT 0");
 
 /* ---------- word list ---------- */
 
@@ -159,12 +169,12 @@ export function activeRound() {
   return newRound(DEFAULT_LIMIT_MS);
 }
 
-export function newRound(limitMs, countdownMs = 5000, questionCount = 20) {
+export function newRound(limitMs, countdownMs = 5000, questionCount = 20, skipsAllowed = 3) {
   const puzzles = loadPuzzles();
   const count = Math.max(1, Math.min(questionCount, puzzles.length));
   const info = db.prepare(
-    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count) VALUES (?, ?, ?, 'lobby', NULL, ?, ?)"
-  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count);
+    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count, skips_allowed) VALUES (?, ?, ?, 'lobby', NULL, ?, ?, ?)"
+  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count, skipsAllowed);
   return db.prepare("SELECT * FROM rounds WHERE id = ?").get(Number(info.lastInsertRowid));
 }
 
@@ -177,9 +187,46 @@ export function setRoundCount(roundId, count) {
   tx(() => {
     db.prepare("UPDATE rounds SET question_count = ? WHERE id = ?").run(count, roundId);
     /* Every waiting player needs a fresh draw at the new length. */
-    db.prepare("UPDATE players SET sequence = NULL, idx = 0 WHERE round_id = ?").run(roundId);
+    db.prepare("UPDATE players SET sequence = NULL, idx = 0, skips_used = 0, reveals_used = 0 WHERE round_id = ?").run(roundId);
     db.prepare("DELETE FROM progress WHERE player_id IN (SELECT id FROM players WHERE round_id = ?)").run(roundId);
   });
+}
+
+export function setRoundSkips(roundId, n) {
+  db.prepare("UPDATE rounds SET skips_allowed = ? WHERE id = ?").run(n, roundId);
+}
+
+/** Give up on the current word: it counts as missed and spends one skip. */
+export function skipRow(playerId, idx, ms) {
+  tx(() => {
+    db.prepare(`
+      UPDATE progress SET status = 'lose', skipped = 1, ms = ?
+       WHERE player_id = ? AND puzzle_idx = ? AND status = 'open'
+    `).run(ms, playerId, idx);
+    db.prepare("UPDATE players SET skips_used = skips_used + 1 WHERE id = ?").run(playerId);
+  });
+  return getRow(playerId, idx);
+}
+
+/**
+ * Buy a letter. The cost is taken by moving the word's start time BACKWARDS,
+ * which is one mechanism doing both halves of the trade: the time left on this
+ * word shrinks, and the elapsed time written to the clock grows.
+ */
+export function revealLetter(playerId, idx, index, penaltyMs) {
+  const row = getRow(playerId, idx);
+  if (!row || row.status !== "open") return row;
+  let seen = [];
+  try { seen = JSON.parse(row.revealed); } catch (e) { seen = []; }
+  if (!seen.includes(index)) seen.push(index);
+  tx(() => {
+    db.prepare(`
+      UPDATE progress SET revealed = ?, started_at = ?
+       WHERE player_id = ? AND puzzle_idx = ?
+    `).run(JSON.stringify(seen), (row.started_at || Date.now()) - penaltyMs, playerId, idx);
+    db.prepare("UPDATE players SET reveals_used = reveals_used + 1 WHERE id = ?").run(playerId);
+  });
+  return getRow(playerId, idx);
 }
 
 export function setPlayerSequence(id, seq) {
@@ -225,7 +272,7 @@ export function upsertPlayer({ id, roundId, name }) {
     if (existing.round_id !== roundId) {
       tx(() => {
         db.prepare("DELETE FROM progress WHERE player_id = ?").run(id);
-        db.prepare("UPDATE players SET round_id = ?, idx = 0, sequence = NULL, name = ?, last_seen = ? WHERE id = ?")
+        db.prepare("UPDATE players SET round_id = ?, idx = 0, sequence = NULL, skips_used = 0, reveals_used = 0, name = ?, last_seen = ? WHERE id = ?")
           .run(roundId, name || existing.name, now, id);
       });
     } else if (name && name !== existing.name) {

@@ -16,7 +16,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_URL = process.env.PUBLIC_URL || "https://quiz.fooxy.tv";
 const COOKIE_SECURE = process.env.COOKIE_SECURE !== "false";
-const LIMIT_CHOICES = [0, 45000, 60000, 90000, 120000, 180000];
+/* Longer options exist because a brutal word plus a letter reveal needs room. */
+const LIMIT_CHOICES = [0, 45000, 60000, 90000, 120000, 180000, 240000, 300000];
+const SKIP_CHOICES = [0, 1, 2, 3, 5];
+/** What a revealed letter costs. Scales with the limit; flat when there is none. */
+const revealCost = (limitMs) => (limitMs ? Math.max(10000, Math.round(limitMs / 6)) : 15000);
 const COUNTDOWN_CHOICES = [3000, 5000, 10000, 30000];
 const PID_COOKIE = "mwq_pid";
 
@@ -108,10 +112,19 @@ function playerState(player, round, pool) {
   const closed = !!row && row.status !== "open";
   const done = results.every((v) => v !== 0);
 
+  let revealed = [];
+  if (row) { try { revealed = JSON.parse(row.revealed || "[]"); } catch (e) { revealed = []; } }
+  const answer = puzzles[idx].answer;
+
   const current = {
     ...clientMeta(puzzles[idx], idx),
     status: row ? row.status : "open",
     timedOut: !!(row && row.timed_out),
+    skipped: !!(row && row.skipped),
+    /* Only the letters bought so far, never the rest of the word. */
+    revealed: revealed
+      .filter((i) => Number.isInteger(i) && i >= 0 && i < answer.length)
+      .map((i) => ({ i, ch: answer[i] })),
     tries: row ? row.tries : 0,
     /* Guesses are re-marked server-side so a reload restores the exact grid. */
     rows: row ? JSON.parse(row.guesses).map((g) => ({ guess: g, marks: mark(g, puzzles[idx].answer) })) : [],
@@ -133,6 +146,10 @@ function playerState(player, round, pool) {
   }
 
   return {
+    /* Every player payload carries this. It used to be added by /api/state
+       alone, so after joining or guessing the client saw `undefined`, its clock
+       tick bailed out, and both timers sat frozen for the whole game. */
+    joined: true,
     round: round.id,
     phase: round.phase,
     startsAt: round.starts_at,
@@ -145,6 +162,12 @@ function playerState(player, round, pool) {
     serverNow: now,
     name: player.name,
     removed: !!player.blocked,
+    skipsAllowed: round.skips_allowed,
+    skipsUsed: player.skips_used || 0,
+    skipsLeft: Math.max(0, round.skips_allowed - (player.skips_used || 0)),
+    revealCostMs: revealCost(round.limit_ms),
+    /* A reveal always leaves at least one letter unknown. */
+    canReveal: !!(row && row.status === "open" && revealed.length < puzzles[idx].answer.length - 1),
     done,
     idx,
     solved,
@@ -188,6 +211,8 @@ function buildBoard() {
       guesses,
       totalMs,
       results,
+      skips: p.skips_used || 0,
+      reveals: p.reveals_used || 0,
       done: closedCount >= count,
       curStartedAt: current ? current.started_at : null,
       online: now - p.last_seen < 45000,
@@ -208,6 +233,9 @@ function buildBoard() {
     countdownMs: round.countdown_ms,
     countdownChoices: COUNTDOWN_CHOICES,
     countChoices: COUNT_CHOICES.filter((n) => n <= puzzles.length),
+    skipChoices: SKIP_CHOICES,
+    skipsAllowed: round.skips_allowed,
+    revealCostMs: revealCost(round.limit_ms),
     limitMs: round.limit_ms,
     puzzleCount: count,
     poolSize: puzzles.length,
@@ -282,7 +310,7 @@ app.get("/api/state", (req, res) => {
     store.expireRow(fresh.id, idx, round.limit_ms);
     store.openRow(fresh.id, idx);
   }
-  res.json({ joined: true, ...playerState(store.getPlayer(player.id), round, puzzles) });
+  res.json(playerState(store.getPlayer(player.id), round, puzzles));
 });
 
 app.post("/api/guess", (req, res) => {
@@ -339,6 +367,74 @@ app.post("/api/guess", (req, res) => {
   res.json(playerState(store.getPlayer(player.id), round, puzzles));
 });
 
+/* Buy a letter, paying in time. */
+app.post("/api/reveal", (req, res) => {
+  const pid = readPid(req);
+  const round = store.activeRound();
+  const puzzles = store.loadPuzzles();
+  const player = pid ? store.getPlayer(pid) : null;
+  if (!player) return res.status(401).json({ error: "not_joined" });
+  if (player.blocked) return res.status(403).json({ error: "removed" });
+  if (round.phase !== "running" || round.starts_at > Date.now()) {
+    return res.status(409).json({ error: "not_started" });
+  }
+
+  const mine = playerPuzzles(player, round, puzzles);
+  const idx = Math.min(player.idx, mine.length - 1);
+  store.expireRow(player.id, idx, round.limit_ms);
+  const row = store.openRow(player.id, idx);
+  if (row.status !== "open") {
+    return res.json(playerState(store.getPlayer(player.id), round, puzzles));
+  }
+
+  const answer = mine[idx].answer;
+  let seen = [];
+  try { seen = JSON.parse(row.revealed || "[]"); } catch (e) { seen = []; }
+  const options = [];
+  for (let i = 0; i < answer.length; i++) if (!seen.includes(i)) options.push(i);
+  /* Never reveal the last unknown letter: the word still has to be typed. */
+  if (options.length <= 1) {
+    return res.status(409).json({ error: "no_more_letters", message: "No more letters to buy on this word." });
+  }
+
+  const pick = options[Math.floor(Math.random() * options.length)];
+  store.revealLetter(player.id, idx, pick, revealCost(round.limit_ms));
+  /* Paying may have used up the word's time outright. */
+  store.expireRow(player.id, idx, round.limit_ms);
+  store.touchPlayer(player.id);
+  broadcastBoard();
+  res.json(playerState(store.getPlayer(player.id), round, puzzles));
+});
+
+/* Give up on this word: it counts as missed and spends one skip. */
+app.post("/api/skip", (req, res) => {
+  const pid = readPid(req);
+  const round = store.activeRound();
+  const puzzles = store.loadPuzzles();
+  const player = pid ? store.getPlayer(pid) : null;
+  if (!player) return res.status(401).json({ error: "not_joined" });
+  if (player.blocked) return res.status(403).json({ error: "removed" });
+  if (round.phase !== "running" || round.starts_at > Date.now()) {
+    return res.status(409).json({ error: "not_started" });
+  }
+  if ((player.skips_used || 0) >= round.skips_allowed) {
+    return res.status(409).json({ error: "no_skips_left", message: "You have used all your skips." });
+  }
+
+  const mine = playerPuzzles(player, round, puzzles);
+  const idx = Math.min(player.idx, mine.length - 1);
+  store.expireRow(player.id, idx, round.limit_ms);
+  const row = store.openRow(player.id, idx);
+  if (row.status !== "open") {
+    return res.json(playerState(store.getPlayer(player.id), round, puzzles));
+  }
+  const elapsed = row.started_at ? Math.max(0, Date.now() - row.started_at) : 0;
+  store.skipRow(player.id, idx, round.limit_ms ? Math.min(elapsed, round.limit_ms) : elapsed);
+  store.touchPlayer(player.id);
+  broadcastBoard();
+  res.json(playerState(store.getPlayer(player.id), round, puzzles));
+});
+
 app.post("/api/next", (req, res) => {
   const pid = readPid(req);
   const round = store.activeRound();
@@ -366,6 +462,16 @@ app.post("/api/next", (req, res) => {
 /* -------------------------------------------------------------- admin API ---- */
 
 app.get("/api/admin/board", requireAdmin, (req, res) => res.json(buildBoard()));
+
+app.post("/api/admin/skips", requireAdmin, (req, res) => {
+  const n = Number(req.body?.skips);
+  if (!SKIP_CHOICES.includes(n)) return res.status(400).json({ error: "bad_skips" });
+  const round = store.activeRound();
+  store.setRoundSkips(round.id, n);
+  broadcastRound();
+  broadcastBoard();
+  res.json({ ok: true, skips: n });
+});
 
 app.post("/api/admin/limit", requireAdmin, (req, res) => {
   const ms = Number(req.body?.limitMs);
@@ -417,7 +523,7 @@ app.post("/api/admin/reset", requireAdmin, (req, res) => {
      ejections do not haunt the next one. Removing someone still sticks for the
      rest of the round they were removed from. */
   store.clearBlocklist();
-  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count);
+  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count, old.skips_allowed);
   /* Everyone is out, not merely cleared: every page returns to the join screen
      and has to opt back in. */
   broadcastAll({ type: "ejected", round: fresh.id });

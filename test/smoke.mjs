@@ -171,6 +171,31 @@ const rivalRow = r.data.players.find((p) => p.name === "Rival");
 check("on-time player is not flagged late", rivalRow && rivalRow.late === false);
 as("me");
 
+// ---- the clocks -----------------------------------------------------------
+/* Every player payload must carry `joined`. It was once set by /api/state alone,
+   so after joining or guessing the client's tick guard bailed and both the
+   per-word countdown and the running total sat frozen for the whole game. */
+check("state payload says joined", (await call("/api/state")).data.joined === true);
+r = await call("/api/guess", "POST", { guess: "Q".repeat(seqProbe.current.length) });
+check("guess payload says joined", r.data.joined === true);
+r = await call("/api/next", "POST");
+check("next payload says joined", r.data.joined === true);
+
+/* And the countdown must actually move. */
+const t1 = (await call("/api/state")).data;
+if (t1.limitMs && t1.current.startedAt) {
+  const left1 = t1.limitMs - (t1.serverNow - t1.current.startedAt);
+  await sleep(2100);
+  const t2 = (await call("/api/state")).data;
+  const left2 = t2.limitMs - (t2.serverNow - t2.current.startedAt);
+  check("the per-word clock counts down", left2 < left1 - 1500,
+    `${Math.round(left1 / 1000)}s then ${Math.round(left2 / 1000)}s`);
+  check("the running total counts up", t2.totalMs > t1.totalMs,
+    `${t1.totalMs}ms then ${t2.totalMs}ms`);
+} else {
+  check("a limit was in force to measure", false, `limitMs=${t1.limitMs}`);
+}
+
 // ---- round length and per-player draws ------------------------------------
 r = await call("/api/admin/board");
 check("board reports the pool and the round length",
@@ -231,6 +256,79 @@ check("no answer is leaked to any of them", seen.every((s) => s.current.answer =
 const longest = Math.max(...BUILTIN_PUZZLES.map((p) => p.answer.length));
 check("pool includes long answers for the grid to cope with", longest >= 10, `longest=${longest}`);
 check("every answer is 3-12 letters A-Z", BUILTIN_PUZZLES.every((p) => /^[A-Z]{3,12}$/.test(p.answer)));
+
+// ---- lifelines: buy a letter, or give the word up ------------------------
+/* Its own round. The section before this one reset and only the crowd rejoined,
+   so "me" was not in a game at all -- which is how this first threw. */
+await call("/api/admin/reset", "POST");
+r = await call("/api/admin/skips", "POST", { skips: 2 });
+check("skip allowance accepted", r.data.ok === true && r.data.skips === 2);
+r = await call("/api/admin/skips", "POST", { skips: 99 });
+check("bogus skip allowance refused", r.status === 400);
+
+await call("/api/admin/count", "POST", { count: 5 });
+await call("/api/admin/limit", "POST", { limitMs: 120000 });
+await call("/api/join", "POST", { name: "Buyer" });
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+
+let st = (await call("/api/state")).data;
+check("a word is in hand to buy letters on",
+  !!st.current && st.current.status === "open" && !!st.current.startedAt,
+  `status=${st.current && st.current.status}`);
+const remaining = (x) => x.limitMs - (x.serverNow - x.current.startedAt);
+const before = remaining(st);
+const wordLen = st.current.length;
+r = await call("/api/reveal", "POST");
+check("buying a letter returns one, in position",
+  r.data.current.revealed.length === 1
+    && Number.isInteger(r.data.current.revealed[0].i)
+    && /^[A-Z]$/.test(r.data.current.revealed[0].ch),
+  JSON.stringify(r.data.current.revealed));
+check("buying a letter costs time off that word",
+  remaining(r.data) < before - (st.revealCostMs - 1500),
+  `${Math.round(before / 1000)}s -> ${Math.round(remaining(r.data) / 1000)}s, cost ${st.revealCostMs / 1000}s`);
+check("the rest of the word is still hidden",
+  r.data.current.answer === null && r.data.current.revealed.length < wordLen);
+
+/* It must never hand over the final unknown letter. */
+for (let i = 0; i < wordLen + 2; i++) {
+  const res = await call("/api/reveal", "POST");
+  if (res.status === 409) break;
+  if (res.data?.current?.status !== "open") break;
+}
+st = (await call("/api/state")).data;
+if (st.current.status === "open") {
+  check("at least one letter always stays unknown",
+    st.current.revealed.length <= st.current.length - 1 && st.canReveal === false,
+    `revealed ${st.current.revealed.length}/${st.current.length}`);
+} else {
+  check("word closed because the letters ate the clock", true, `status=${st.current.status}`);
+}
+
+/* Skipping. */
+await call("/api/admin/reset", "POST");
+await call("/api/admin/skips", "POST", { skips: 1 });
+await call("/api/admin/limit", "POST", { limitMs: 90000 });
+await call("/api/join", "POST", { name: "Skipper" });
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+r = await call("/api/skip", "POST");
+check("skip closes the word as missed",
+  r.data.current.status === "lose" && r.data.current.skipped === true);
+check("skip reveals the answer", typeof r.data.current.answer === "string");
+check("skip spends the allowance", r.data.skipsLeft === 0, `left=${r.data.skipsLeft}`);
+check("a skipped word is marked apart from a miss", r.data.results[0] === -2, `code=${r.data.results[0]}`);
+r = await call("/api/next", "POST");
+r = await call("/api/skip", "POST");
+check("skipping past the allowance is refused", r.status === 409 && r.data.error === "no_skips_left");
+r = await call("/api/admin/board");
+const me2 = r.data.players[0];
+check("the board counts skips and letters bought",
+  me2.skips === 1 && me2.reveals >= 0, `skips=${me2.skips} reveals=${me2.reveals}`);
+check("the board reports the skip allowance and letter cost",
+  r.data.skipsAllowed === 1 && r.data.revealCostMs > 0,
+  `allowed=${r.data.skipsAllowed} cost=${r.data.revealCostMs}`);
 
 // ---- themes ---------------------------------------------------------------
 r = await call("/api/theme");
