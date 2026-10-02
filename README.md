@@ -73,6 +73,46 @@ for live updates, and `qrcode` to render the join code server-side. One containe
 plus a `cloudflared` sidecar. State lives in SQLite on a volume and survives
 restarts, so you get history across sessions rather than one throwaway game.
 
+## Testing it locally, in Docker
+
+No Cloudflare, no `.env`, no npm:
+
+```bash
+./scripts/local.sh              # build, run, print the URLs
+```
+
+Players on `http://localhost:8099`, host portal on `http://localhost:8099/admin`.
+
+```bash
+./scripts/local.sh lan          # bind all interfaces, so a phone can scan the QR
+./scripts/local.sh test         # the full suite, against the container
+./scripts/local.sh logs
+./scripts/local.sh down         # stop (keeps the local database)
+./scripts/local.sh fresh        # wipe the local database and restart
+```
+
+`lan` works out this machine's address and sets `PUBLIC_URL` to it, so the QR
+code on the host screen resolves from a phone on the same network — the quickest
+way to try the whole flow before it touches the server.
+
+**Why the host portal needs a flag locally.** The bypass for local work only
+trusts loopback, and a container never sees loopback: a request through a
+published port arrives from the Docker bridge, so `/admin` would 403. The local
+stack therefore sets `ADMIN_INSECURE_LOCAL=1`, which widens that to private
+address ranges — and the app honours it **only when `NODE_ENV` is not
+production**. The deployed image sets `NODE_ENV=production`, so this flag cannot
+open the admin portal on your server even if it is left in a `.env` there.
+`deploy.sh` refuses to deploy if it finds it anyway.
+
+Verified, on the real image:
+
+| | |
+|---|---|
+| local stack, `/admin` | 200 |
+| production `NODE_ENV`, flag still set, every admin route and the admin WebSocket | 403 |
+| forged `alg:none` Access token, header and cookie | 403 |
+| players, in both | 200 |
+
 ## Running it on your server
 
 ```bash
@@ -92,6 +132,7 @@ non-zero, rather than claiming success.
 | `./scripts/deploy.sh` | build, start, wait for healthy |
 | `./scripts/logs.sh [service]` | follow the logs (`quiz` by default, or `tunnel`) |
 | `./scripts/backup.sh [dir]` | consistent SQLite snapshot plus the word list |
+| `./scripts/local.sh` | run it locally in Docker, no Cloudflare needed |
 
 `deploy.sh` warns if `CF_ACCESS_AUD` or `CF_ACCESS_TEAM_DOMAIN` are still unset
 or left as the placeholder — the admin portal refuses everything in that state,
@@ -180,7 +221,7 @@ public/admin.js   host portal
 public/art.js     procedural comic artwork
 public/sound.js   procedural audio
 public/styles.css one stylesheet, both themes
-scripts/          build, deploy, logs, backup
+scripts/          build, deploy, local, logs, backup
 test/smoke.mjs    end-to-end suite
 ```
 
@@ -207,9 +248,10 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 ## Tests
 
 ```bash
-npm run dev          # terminal one
-npm test             # terminal two
+./scripts/local.sh && ./scripts/local.sh test
 ```
+
+Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
 Fifty-two checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through

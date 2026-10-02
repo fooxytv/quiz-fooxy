@@ -1,0 +1,32 @@
+# Local testing on your own machine, in Docker, with no Cloudflare anything.
+#
+#   ./scripts/local.sh            build, run, print the URLs
+#   ./scripts/local.sh lan        same, but reachable from your phone
+#   ./scripts/local.sh test       run the suite against the container
+#   ./scripts/local.sh down       stop it
+#
+# This stack has no tunnel and needs no .env. The host portal is opened by
+# ADMIN_INSECURE_LOCAL, which the app honours ONLY when NODE_ENV is not
+# production -- so this cannot be the config that ships.
+name: marvel-quiz-local
+
+services:
+  quiz:
+    build: .
+    image: marvel-quiz:local
+    container_name: marvel-quiz-local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      ADMIN_INSECURE_LOCAL: "1"
+      COOKIE_SECURE: "false"
+      DATA_DIR: /data
+      DEFAULT_LIMIT_MS: "${DEFAULT_LIMIT_MS:-90000}"
+      PUBLIC_URL: "${LOCAL_PUBLIC_URL:-http://localhost:8099}"
+    ports:
+      - "${LOCAL_BIND:-127.0.0.1}:${LOCAL_PORT:-8099}:3000"
+    volumes:
+      - local-data:/data
+
+volumes:
+  local-data:

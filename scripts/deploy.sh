@@ -22,6 +22,17 @@ if (( ${#missing[@]} )); then
   sleep 5
 fi
 
+# These belong to local testing only. Refuse rather than warn: a deploy that
+# quietly weakens the admin portal is worse than a deploy that stops.
+for leak in ADMIN_INSECURE_LOCAL ADMIN_DEV_BYPASS; do
+  if grep -qE "^${leak}=1" .env; then
+    echo "!! ${leak}=1 is set in .env. That is a local-testing flag; remove it before deploying." >&2
+    echo "   (The image sets NODE_ENV=production, which already neutralises ADMIN_INSECURE_LOCAL," >&2
+    echo "    but it has no business in a deployed config.)" >&2
+    exit 1
+  fi
+done
+
 COMPOSE=(docker compose)
 docker compose version >/dev/null 2>&1 || COMPOSE=(docker-compose)
 

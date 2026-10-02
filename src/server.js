@@ -8,7 +8,7 @@ import QRCode from "qrcode";
 
 import { MAX_TRIES, clientMeta, validatePuzzles } from "./words.js";
 import { mark, resultCode, rowMs, compareEntries } from "./game.js";
-import { requireAdmin, verifyAdmin, parseCookies, accessConfigured } from "./auth.js";
+import { requireAdmin, verifyAdmin, parseCookies, accessConfigured, insecureLocal, devBypass } from "./auth.js";
 import * as store from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -515,12 +515,24 @@ setInterval(() => {
 server.listen(PORT, () => {
   const authMode = accessConfigured
     ? "Cloudflare Access"
-    : process.env.ADMIN_DEV_BYPASS === "1"
-      ? "DEV BYPASS (loopback only)"
-      : "SEALED - set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD";
+    : insecureLocal
+      ? "OPEN TO THE LOCAL NETWORK"
+      : devBypass
+        ? "DEV BYPASS (loopback only)"
+        : "SEALED - set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD";
   console.log(`marvel-quiz listening on :${PORT}`);
   console.log(`  public url   ${PUBLIC_URL}`);
   console.log(`  data dir     ${store.DATA_DIR}`);
   console.log(`  puzzles      ${store.loadPuzzles().length}`);
   console.log(`  admin auth   ${authMode}`);
+  if (insecureLocal) {
+    console.log("");
+    console.log("  ****************************************************************");
+    console.log("  *  ADMIN_INSECURE_LOCAL is on: anyone who can reach this port  *");
+    console.log("  *  from a private address can open the host portal.            *");
+    console.log("  *  For local testing only. It is ignored when NODE_ENV is      *");
+    console.log("  *  production, which the deployed image sets.                  *");
+    console.log("  ****************************************************************");
+    console.log("");
+  }
 });
