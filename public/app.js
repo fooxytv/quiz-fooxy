@@ -252,7 +252,8 @@
             </div>
           </div>
           ${state.limitMs && !closed ? `<div class="tbar ${barClass()}" id="tbar"><i style="width:${barPct()}%"></i></div>` : ""}
-          ${!closed && c.revealed && c.revealed.length ? `<div class="known" aria-label="Letters you have bought">
+          ${!closed && c.bigHint ? `<p class="bighint">${esc(c.bigHint)}</p>` : ""}
+          ${!closed && c.revealed && c.revealed.length ? `<div class="known" aria-label="Letters you have been given">
             ${Array.from({ length: c.length }, (_, i) => {
               const hit = c.revealed.find((r) => r.i === i);
               return `<span class="kn ${hit ? "on" : ""}">${hit ? esc(hit.ch) : ""}</span>`;
@@ -298,6 +299,15 @@
         if (busy) return;
         busy = true; rv.disabled = true;
         try { adopt(await api("/api/reveal", {})); window.Sfx?.key(); }
+        catch (e) { toast(e.message); }
+        finally { busy = false; }
+      };
+
+      const hb = $("hintBtn");
+      if (hb) hb.onclick = async () => {
+        if (busy) return;
+        busy = true; hb.disabled = true;
+        try { adopt(await api("/api/bighint", {})); }
         catch (e) { toast(e.message); }
         finally { busy = false; }
       };
@@ -371,18 +381,19 @@
    */
   function lifelines() {
     const c = state.current;
-    const cost = Math.round((state.revealCostMs || 15000) / 1000);
+    const cost = Math.round((state.revealCostMs || 0) / 1000);
     const left = state.skipsLeft ?? 0;
     const allowed = state.skipsAllowed ?? 0;
     return `<div class="lifelines">
       <button class="btn ghost sm" id="revealBtn" type="button" ${state.canReveal ? "" : "disabled"}>
-        Buy a letter <span class="cost">&minus;${cost}s</span>
+        Another letter ${cost > 0 ? `<span class="cost">&minus;${cost}s</span>` : `<span class="cost">free</span>`}
       </button>
+      ${!c.bigHint ? `<button class="btn ghost sm" id="hintBtn" type="button">Bigger hint <span class="cost">free</span></button>` : ""}
       ${allowed > 0 ? `<button class="btn ghost sm" id="skipBtn" type="button" ${left > 0 ? "" : "disabled"}>
         Skip it <span class="cost">${left} left</span>
       </button>` : ""}
       <p class="meta" style="flex:1 1 100%;margin:2px 0 0">
-        A letter costs ${cost} seconds off this word's clock. Skipping gives the word up for lost &mdash; it counts as missed, and solved words outrank time.
+        Take as many letters as you like${cost > 0 ? `, ${cost} seconds off this word's clock each` : " &mdash; they are free this round"}. Skipping gives the word up: it counts as missed, and solved words outrank time.
       </p>
     </div>`;
   }

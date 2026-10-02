@@ -65,7 +65,8 @@ db.exec(`
     starts_at    INTEGER,
     countdown_ms INTEGER NOT NULL DEFAULT 5000,
     question_count INTEGER NOT NULL DEFAULT 20,
-    skips_allowed  INTEGER NOT NULL DEFAULT 3
+    skips_allowed  INTEGER NOT NULL DEFAULT 3,
+    help_level     TEXT NOT NULL DEFAULT 'helpful'
   );
   CREATE TABLE IF NOT EXISTS players (
     id        TEXT PRIMARY KEY,
@@ -77,7 +78,8 @@ db.exec(`
     blocked   INTEGER NOT NULL DEFAULT 0,
     sequence  TEXT,
     skips_used INTEGER NOT NULL DEFAULT 0,
-    reveals_used INTEGER NOT NULL DEFAULT 0
+    reveals_used INTEGER NOT NULL DEFAULT 0,
+    hints_used   INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS players_round ON players(round_id);
   CREATE TABLE IF NOT EXISTS progress (
@@ -87,6 +89,7 @@ db.exec(`
     timed_out  INTEGER NOT NULL DEFAULT 0,
     skipped    INTEGER NOT NULL DEFAULT 0,
     revealed   TEXT NOT NULL DEFAULT '[]',
+    big_hint   INTEGER NOT NULL DEFAULT 0,
     tries      INTEGER NOT NULL DEFAULT 0,
     guesses    TEXT NOT NULL DEFAULT '[]',
     started_at INTEGER,
@@ -120,6 +123,9 @@ ensureColumn("players", "skips_used", "skips_used INTEGER NOT NULL DEFAULT 0");
 ensureColumn("progress", "skipped", "skipped INTEGER NOT NULL DEFAULT 0");
 ensureColumn("progress", "revealed", "revealed TEXT NOT NULL DEFAULT '[]'");
 ensureColumn("players", "reveals_used", "reveals_used INTEGER NOT NULL DEFAULT 0");
+ensureColumn("rounds", "help_level", "help_level TEXT NOT NULL DEFAULT 'helpful'");
+ensureColumn("players", "hints_used", "hints_used INTEGER NOT NULL DEFAULT 0");
+ensureColumn("progress", "big_hint", "big_hint INTEGER NOT NULL DEFAULT 0");
 
 /* ---------- word list ---------- */
 
@@ -169,12 +175,12 @@ export function activeRound() {
   return newRound(DEFAULT_LIMIT_MS);
 }
 
-export function newRound(limitMs, countdownMs = 5000, questionCount = 20, skipsAllowed = 3) {
+export function newRound(limitMs, countdownMs = 5000, questionCount = 20, skipsAllowed = 3, helpLevel = "helpful") {
   const puzzles = loadPuzzles();
   const count = Math.max(1, Math.min(questionCount, puzzles.length));
   const info = db.prepare(
-    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count, skips_allowed) VALUES (?, ?, ?, 'lobby', NULL, ?, ?, ?)"
-  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count, skipsAllowed);
+    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count, skips_allowed, help_level) VALUES (?, ?, ?, 'lobby', NULL, ?, ?, ?, ?)"
+  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count, skipsAllowed, helpLevel);
   return db.prepare("SELECT * FROM rounds WHERE id = ?").get(Number(info.lastInsertRowid));
 }
 
@@ -187,7 +193,7 @@ export function setRoundCount(roundId, count) {
   tx(() => {
     db.prepare("UPDATE rounds SET question_count = ? WHERE id = ?").run(count, roundId);
     /* Every waiting player needs a fresh draw at the new length. */
-    db.prepare("UPDATE players SET sequence = NULL, idx = 0, skips_used = 0, reveals_used = 0 WHERE round_id = ?").run(roundId);
+    db.prepare("UPDATE players SET sequence = NULL, idx = 0, skips_used = 0, reveals_used = 0, hints_used = 0 WHERE round_id = ?").run(roundId);
     db.prepare("DELETE FROM progress WHERE player_id IN (SELECT id FROM players WHERE round_id = ?)").run(roundId);
   });
 }
@@ -225,6 +231,25 @@ export function revealLetter(playerId, idx, index, penaltyMs) {
        WHERE player_id = ? AND puzzle_idx = ?
     `).run(JSON.stringify(seen), (row.started_at || Date.now()) - penaltyMs, playerId, idx);
     db.prepare("UPDATE players SET reveals_used = reveals_used + 1 WHERE id = ?").run(playerId);
+  });
+  return getRow(playerId, idx);
+}
+
+export function setRoundHelp(roundId, level) {
+  db.prepare("UPDATE rounds SET help_level = ? WHERE id = ?").run(level, roundId);
+}
+
+/** Letters the round hands over for nothing, at no time cost. */
+export function giveFreeLetters(playerId, idx, positions) {
+  db.prepare("UPDATE progress SET revealed = ? WHERE player_id = ? AND puzzle_idx = ?")
+    .run(JSON.stringify(positions), playerId, idx);
+  return getRow(playerId, idx);
+}
+
+export function markBigHint(playerId, idx) {
+  tx(() => {
+    db.prepare("UPDATE progress SET big_hint = 1 WHERE player_id = ? AND puzzle_idx = ?").run(playerId, idx);
+    db.prepare("UPDATE players SET hints_used = hints_used + 1 WHERE id = ?").run(playerId);
   });
   return getRow(playerId, idx);
 }
@@ -272,7 +297,7 @@ export function upsertPlayer({ id, roundId, name }) {
     if (existing.round_id !== roundId) {
       tx(() => {
         db.prepare("DELETE FROM progress WHERE player_id = ?").run(id);
-        db.prepare("UPDATE players SET round_id = ?, idx = 0, sequence = NULL, skips_used = 0, reveals_used = 0, name = ?, last_seen = ? WHERE id = ?")
+        db.prepare("UPDATE players SET round_id = ?, idx = 0, sequence = NULL, skips_used = 0, reveals_used = 0, hints_used = 0, name = ?, last_seen = ? WHERE id = ?")
           .run(roundId, name || existing.name, now, id);
       });
     } else if (name && name !== existing.name) {

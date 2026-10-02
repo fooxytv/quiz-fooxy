@@ -170,6 +170,13 @@
       ${running
         ? `<p class="meta" style="margin:10px 0 0">Locked while a round is under way &mdash; reset to change it.</p>`
         : `<p class="meta" style="margin:10px 0 0">At ${board.puzzleCount} questions two players will have roughly <b>${shared} words in common</b> (${pct}% of the round), because some tiers are shallow. Shorter rounds overlap less; adding words to the thin tiers below helps most.</p>`}
+      <h4 style="margin-top:14px">How much help</h4>
+      <p class="meta" style="margin:0">One setting for the lot. Players can always take as many letters as they like; this sets how many a word opens with and what another one costs.</p>
+      <div class="seg" style="margin:10px 0 0" role="group" aria-label="How much help">
+        ${(board.helpLevels || []).map((h) => `<button data-help="${esc(h.id)}" aria-pressed="${h.id === board.helpLevel}" type="button">${esc(h.label)}</button>`).join("")}
+      </div>
+      <p class="meta" style="margin:8px 0 0">${esc((board.helpLevels || []).find((h) => h.id === board.helpLevel)?.blurb || "")} A <b>Bigger hint</b> is always free: it gives the first and last letter, the vowel count, and whether a letter repeats.</p>
+
       <h4 style="margin-top:14px">Skips per player</h4>
       <p class="meta" style="margin:0">A skip gives a word up for lost. It counts as missed, so it costs a solve &mdash; which outranks any time saved. Buying a letter is unlimited instead, and costs <b>${Math.round((board.revealCostMs || 15000) / 1000)}s</b> off that word's clock each time.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Skips per player">
@@ -306,6 +313,15 @@
     if (cr) wireDanger(cr, "Tap again to clear", async () => {
       const out = await api("/api/admin/clear-removed", { method: "POST" });
       hostMsg(out.cleared ? `Cleared ${out.cleared} from the removed list.` : "Nothing to clear.", "ok");
+    });
+
+    root.querySelectorAll("[data-help]").forEach((b) => {
+      b.onclick = async () => {
+        const lvl = b.dataset.help;
+        if (lvl === board.helpLevel) return;
+        try { await api("/api/admin/help", { method: "POST", body: { help: lvl } }); hostMsg("Help level changed. It applies to the next word everyone opens.", "ok"); }
+        catch (e) { hostMsg(e.message, "err"); }
+      };
     });
 
     root.querySelectorAll("[data-skips]").forEach((b) => {
@@ -473,7 +489,7 @@
 
       <div class="table-scroll">
         ${list.length ? `<table class="board">
-          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters bought with time">Letters</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters taken">Letters</th><th title="Bigger hints asked for">Hints</th><th></th></tr></thead>
           <tbody>${list.map((p, n) => `<tr>
             <td class="rank mono-num ${n === 0 ? "top" : ""}">${n + 1}</td>
             <td><div class="who-name">${esc(p.name)}</div><div class="who-sub">${board.phase !== "running" ? "In the lobby" : (p.done ? "Finished" : (p.online ? "On puzzle " + (p.idx + 1) : "Away &middot; puzzle " + (p.idx + 1)))}${p.late ? `<span class="golate" title="Joined after the go, so their clock started later">late</span>` : ""}</div></td>
@@ -483,6 +499,7 @@
             <td class="mono-num" style="color:var(--muted)">${p.guesses}</td>
             <td class="mono-num"><span class="useno ${p.skips ? "used" : ""}">${p.skips || 0}</span></td>
             <td class="mono-num"><span class="useno ${p.reveals ? "used" : ""}">${p.reveals || 0}</span></td>
+            <td class="mono-num"><span class="useno ${p.hints ? "used" : ""}">${p.hints || 0}</span></td>
             <td style="text-align:right"><button class="kick" data-kick="${esc(p.id)}" type="button">Remove</button></td>
           </tr>`).join("")}</tbody>
         </table>` : `<div class="empty-board"><strong>Nobody has joined yet</strong>Switch to the join screen and put the QR code up.</div>`}

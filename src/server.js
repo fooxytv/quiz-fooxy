@@ -25,8 +25,41 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE !== "false";
 /* Longer options exist because a brutal word plus a letter reveal needs room. */
 const LIMIT_CHOICES = [0, 45000, 60000, 90000, 120000, 180000, 240000, 300000];
 const SKIP_CHOICES = [0, 1, 2, 3, 5];
-/** What a revealed letter costs. Scales with the limit; flat when there is none. */
-const revealCost = (limitMs) => (limitMs ? Math.max(10000, Math.round(limitMs / 6)) : 15000);
+
+/*
+ * One knob for how much help a round gives, because three separate settings is
+ * three things to get wrong while people are waiting. Each level sets how many
+ * letters a word opens with and what another one costs.
+ */
+const HELP_LEVELS = {
+  off:      { label: "Off",      free: 0, costMs: null, blurb: "No free letters. A bought letter costs a sixth of the word's clock." },
+  helpful:  { label: "Helpful",  free: 1, costMs: 10000, blurb: "Every word opens with one letter showing. More cost 10s each." },
+  generous: { label: "Generous", free: 2, costMs: 0,     blurb: "Every word opens with two letters showing, and more are free." },
+};
+const helpOf = (round) => HELP_LEVELS[round.help_level] || HELP_LEVELS.helpful;
+/** `null` in a level means "scale with the limit". */
+function revealCost(round) {
+  const h = helpOf(round);
+  if (h.costMs !== null) return h.costMs;
+  return round.limit_ms ? Math.max(10000, Math.round(round.limit_ms / 6)) : 15000;
+}
+
+/*
+ * The bigger hint. Built from the answer's shape rather than written prose, so it
+ * exists for all 126 words, can never be factually wrong, and gives away only
+ * what it says.
+ */
+function bigHintFor(answer) {
+  const vowels = (answer.match(/[AEIOU]/g) || []).length;
+  const repeated = new Set(answer).size < answer.length;
+  const bits = [
+    `starts with ${answer[0]}`,
+    `ends with ${answer[answer.length - 1]}`,
+    `${vowels} vowel${vowels === 1 ? "" : "s"}`,
+  ];
+  if (repeated) bits.push("a letter appears twice");
+  return bits.join(" · ");
+}
 const COUNTDOWN_CHOICES = [3000, 5000, 10000, 30000];
 const PID_COOKIE = "mwq_pid";
 const BUILD = { sha: process.env.BUILD_SHA || "dev", at: process.env.BUILD_AT || "dev" };
@@ -73,6 +106,27 @@ function cleanName(v) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 28);
+}
+
+/*
+ * Hand over the round's free letters the first time a word is served. Guarded on
+ * an untouched row, so it runs once and never overwrites bought letters.
+ */
+function applyFreeLetters(player, round, puzzle, idx) {
+  const free = helpOf(round).free;
+  if (free <= 0) return;
+  const row = store.getRow(player.id, idx);
+  if (!row || row.status !== "open" || row.tries > 0) return;
+  let seen = [];
+  try { seen = JSON.parse(row.revealed || "[]"); } catch (e) { seen = []; }
+  if (seen.length) return;
+  const n = Math.min(free, puzzle.answer.length - 1);
+  const pool = Array.from({ length: puzzle.answer.length }, (_, i) => i);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  store.giveFreeLetters(player.id, idx, pool.slice(0, n).sort((a, b) => a - b));
 }
 
 /* --------------------------------------------------------------- sequence ---- */
@@ -132,6 +186,8 @@ function playerState(player, round, pool) {
     status: row ? row.status : "open",
     timedOut: !!(row && row.timed_out),
     skipped: !!(row && row.skipped),
+    /* Only once bought, like the letters. */
+    bigHint: row && row.big_hint ? bigHintFor(answer) : null,
     /* Only the letters bought so far, never the rest of the word. */
     revealed: revealed
       .filter((i) => Number.isInteger(i) && i >= 0 && i < answer.length)
@@ -176,7 +232,8 @@ function playerState(player, round, pool) {
     skipsAllowed: round.skips_allowed,
     skipsUsed: player.skips_used || 0,
     skipsLeft: Math.max(0, round.skips_allowed - (player.skips_used || 0)),
-    revealCostMs: revealCost(round.limit_ms),
+    revealCostMs: revealCost(round),
+    helpLevel: round.help_level,
     /* A reveal always leaves at least one letter unknown. */
     canReveal: !!(row && row.status === "open" && revealed.length < puzzles[idx].answer.length - 1),
     done,
@@ -224,6 +281,7 @@ function buildBoard() {
       results,
       skips: p.skips_used || 0,
       reveals: p.reveals_used || 0,
+      hints: p.hints_used || 0,
       done: closedCount >= count,
       curStartedAt: current ? current.started_at : null,
       online: now - p.last_seen < 45000,
@@ -246,7 +304,9 @@ function buildBoard() {
     countChoices: COUNT_CHOICES.filter((n) => n <= puzzles.length),
     skipChoices: SKIP_CHOICES,
     skipsAllowed: round.skips_allowed,
-    revealCostMs: revealCost(round.limit_ms),
+    revealCostMs: revealCost(round),
+    helpLevel: round.help_level,
+    helpLevels: Object.entries(HELP_LEVELS).map(([id, h]) => ({ id, label: h.label, blurb: h.blurb, free: h.free })),
     limitMs: round.limit_ms,
     puzzleCount: count,
     poolSize: puzzles.length,
@@ -286,7 +346,9 @@ app.post("/api/join", (req, res) => {
   if (round.phase === "running") {
     /* Joining after the go: this player's own clock starts now, not at the go. */
     const mine = playerPuzzles(store.getPlayer(pid), round, puzzles);
-    store.openRow(player.id, Math.min(player.idx, mine.length - 1));
+    const at = Math.min(player.idx, mine.length - 1);
+    store.openRow(player.id, at);
+    applyFreeLetters(player, round, mine[at], at);
   }
   broadcastBoard();
   res.json(playerState(store.getPlayer(pid), round, puzzles));
@@ -321,6 +383,7 @@ app.get("/api/state", (req, res) => {
     const idx = Math.min(fresh.idx, mine.length - 1);
     store.expireRow(fresh.id, idx, round.limit_ms);
     store.openRow(fresh.id, idx);
+    applyFreeLetters(fresh, round, mine[idx], idx);
   }
   res.json(playerState(store.getPlayer(player.id), round, puzzles));
 });
@@ -410,9 +473,29 @@ app.post("/api/reveal", (req, res) => {
   }
 
   const pick = options[Math.floor(Math.random() * options.length)];
-  store.revealLetter(player.id, idx, pick, revealCost(round.limit_ms));
+  store.revealLetter(player.id, idx, pick, revealCost(round));
   /* Paying may have used up the word's time outright. */
   store.expireRow(player.id, idx, round.limit_ms);
+  store.touchPlayer(player.id);
+  broadcastBoard();
+  res.json(playerState(store.getPlayer(player.id), round, puzzles));
+});
+
+/* The bigger hint. Free, and recorded so the board can show who leaned on it. */
+app.post("/api/bighint", (req, res) => {
+  const pid = readPid(req);
+  const round = store.activeRound();
+  const puzzles = store.loadPuzzles();
+  const player = pid ? store.getPlayer(pid) : null;
+  if (!player) return res.status(401).json({ error: "not_joined" });
+  if (player.blocked) return res.status(403).json({ error: "removed" });
+  if (round.phase !== "running" || round.starts_at > Date.now()) {
+    return res.status(409).json({ error: "not_started" });
+  }
+  const mine = playerPuzzles(player, round, puzzles);
+  const idx = Math.min(player.idx, mine.length - 1);
+  const row = store.openRow(player.id, idx);
+  if (row.status === "open" && !row.big_hint) store.markBigHint(player.id, idx);
   store.touchPlayer(player.id);
   broadcastBoard();
   res.json(playerState(store.getPlayer(player.id), round, puzzles));
@@ -465,6 +548,7 @@ app.post("/api/next", (req, res) => {
   if (row && row.status !== "open" && idx < mine.length - 1) {
     store.setPlayerIdx(player.id, idx + 1);
     store.openRow(player.id, idx + 1);
+    applyFreeLetters(player, round, mine[idx + 1], idx + 1);
   }
   store.touchPlayer(player.id);
   broadcastBoard();
@@ -474,6 +558,16 @@ app.post("/api/next", (req, res) => {
 /* -------------------------------------------------------------- admin API ---- */
 
 app.get("/api/admin/board", requireAdmin, (req, res) => res.json(buildBoard()));
+
+app.post("/api/admin/help", requireAdmin, (req, res) => {
+  const level = String(req.body?.help || "");
+  if (!HELP_LEVELS[level]) return res.status(400).json({ error: "bad_help" });
+  const round = store.activeRound();
+  store.setRoundHelp(round.id, level);
+  broadcastRound();
+  broadcastBoard();
+  res.json({ ok: true, help: level });
+});
 
 app.post("/api/admin/skips", requireAdmin, (req, res) => {
   const n = Number(req.body?.skips);
@@ -535,7 +629,7 @@ app.post("/api/admin/reset", requireAdmin, (req, res) => {
      ejections do not haunt the next one. Removing someone still sticks for the
      rest of the round they were removed from. */
   store.clearBlocklist();
-  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count, old.skips_allowed);
+  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count, old.skips_allowed, old.help_level);
   /* Everyone is out, not merely cleared: every page returns to the join screen
      and has to opt back in. */
   broadcastAll({ type: "ejected", round: fresh.id });

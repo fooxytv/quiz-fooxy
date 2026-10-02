@@ -289,12 +289,14 @@ check("a word is in hand to buy letters on",
 const remaining = (x) => x.limitMs - (x.serverNow - x.current.startedAt);
 const before = remaining(st);
 const wordLen = st.current.length;
+/* A word may already be showing letters the round gave away, so measure the
+   change rather than assuming it starts bare. */
+const shownBefore = st.current.revealed.length;
 r = await call("/api/reveal", "POST");
-check("buying a letter returns one, in position",
-  r.data.current.revealed.length === 1
-    && Number.isInteger(r.data.current.revealed[0].i)
-    && /^[A-Z]$/.test(r.data.current.revealed[0].ch),
-  JSON.stringify(r.data.current.revealed));
+check("taking a letter adds exactly one, in position",
+  r.data.current.revealed.length === shownBefore + 1
+    && r.data.current.revealed.every((x) => Number.isInteger(x.i) && /^[A-Z]$/.test(x.ch)),
+  `${shownBefore} -> ${r.data.current.revealed.length}: ${JSON.stringify(r.data.current.revealed)}`);
 check("buying a letter costs time off that word",
   remaining(r.data) < before - (st.revealCostMs - 1500),
   `${Math.round(before / 1000)}s -> ${Math.round(remaining(r.data) / 1000)}s, cost ${st.revealCostMs / 1000}s`);
@@ -362,6 +364,8 @@ for (const [what, needle] of [
   ["the lifelines are rendered", "keyboard() + lifelines()"],
   ["the buy-a-letter button is wired", 'id="revealBtn"'],
   ["buy-a-letter reads canReveal from the right place", "state.canReveal ?"],
+  ["the bigger-hint button is wired", 'id="hintBtn"'],
+  ["the bigger hint is rendered", 'class="bighint"'],
   ["the skip button is wired", 'id="skipBtn"'],
   ["the bought-letters strip is rendered", 'class="known"'],
   ["auto-advance is scheduled", "autoNextTimer = setTimeout(goNext"],
@@ -388,11 +392,64 @@ for (const [what, needle] of [
   ["focus hides the controls", "hideinfocus"],
   ["the skip allowance control is wired", "data-skips"],
   ["the board shows skips and letters bought", "p.reveals"],
+  ["the help control is wired", "data-help"],
+  ["the board shows hints used", "p.hints"],
   ["the host can test sound on demand", 'id="testSound"'],
   ["the host is told the audio state", 'id="soundState"'],
 ]) {
   check(what, adminJs.includes(needle), needle);
 }
+
+// ---- how much help ---------------------------------------------------------
+r = await call("/api/admin/help", "POST", { help: "nonsense" });
+check("bogus help level refused", r.status === 400 && r.data.error === "bad_help");
+
+const skel = (x) => (x.current.revealed || []).length;
+for (const [level, freeExpected, costExpected] of [["off", 0, null], ["helpful", 1, 10000], ["generous", 2, 0]]) {
+  await call("/api/admin/reset", "POST");
+  await call("/api/admin/count", "POST", { count: 3 });
+  await call("/api/admin/limit", "POST", { limitMs: 90000 });
+  r = await call("/api/admin/help", "POST", { help: level });
+  check(`help level "${level}" accepted`, r.data.ok === true && r.data.help === level);
+  await call("/api/join", "POST", { name: "Helper" });
+  r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+  await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+
+  let st = (await call("/api/state")).data;
+  /* A word can be shorter than the allowance, which caps at length - 1. */
+  const cap = Math.min(freeExpected, st.current.length - 1);
+  check(`"${level}" opens a word with ${cap} letter(s) showing`, skel(st) === cap,
+    `showing ${skel(st)} of ${st.current.length}`);
+  if (costExpected !== null) {
+    check(`"${level}" charges ${costExpected / 1000}s a letter`, st.revealCostMs === costExpected,
+      `${st.revealCostMs}ms`);
+  }
+
+  /* The bigger hint is free: the clock must not move because of it. */
+  const before = st.limitMs - (st.serverNow - st.current.startedAt);
+  st = (await call("/api/bighint", "POST")).data;
+  const after = st.limitMs - (st.serverNow - st.current.startedAt);
+  check(`"${level}" bigger hint returns the shape of the word`,
+    typeof st.current.bigHint === "string" && /starts with [A-Z]/.test(st.current.bigHint),
+    st.current.bigHint);
+  check(`"${level}" bigger hint costs no time`, Math.abs(before - after) < 1500,
+    `${Math.round(before / 1000)}s then ${Math.round(after / 1000)}s`);
+  check(`"${level}" bigger hint never names the answer`,
+    !st.current.bigHint.includes(st.current.answer || "\u0000"));
+
+  if (costExpected === 0) {
+    const t0 = st.limitMs - (st.serverNow - st.current.startedAt);
+    const r2 = await call("/api/reveal", "POST");
+    if (r2.status === 200 && r2.data.current.status === "open") {
+      const t1 = r2.data.limitMs - (r2.data.serverNow - r2.data.current.startedAt);
+      check(`"${level}" a letter really is free`, Math.abs(t0 - t1) < 1500,
+        `${Math.round(t0 / 1000)}s then ${Math.round(t1 / 1000)}s`);
+    }
+  }
+  const bd = await call("/api/admin/board");
+  check(`"${level}" board counts the hint`, bd.data.players[0].hints >= 1, `hints=${bd.data.players[0].hints}`);
+}
+await call("/api/admin/help", "POST", { help: "helpful" });
 
 // ---- themes ---------------------------------------------------------------
 r = await call("/api/theme");

@@ -543,3 +543,9 @@ body.focus-board .useno{font-size:19px}
 .soundbtn.locked{border-color:var(--gold);color:var(--gold);animation:nudge 2.2s ease-in-out infinite}
 @keyframes nudge{0%,100%{opacity:1}50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){.soundbtn.locked{animation:none}}
+.bighint{
+  margin:0 0 12px;text-align:center;font-weight:700;font-size:13px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--azure);
+}
+/* One style for every given letter: nobody cares which were free. */
+.known .kn.on{border-bottom-color:var(--gold);color:var(--gold)}
