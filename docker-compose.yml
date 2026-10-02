@@ -1,6 +1,10 @@
 services:
   quiz:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_SHA: "${BUILD_SHA:-unknown}"
+        BUILD_AT: "${BUILD_AT:-unknown}"
     image: marvel-quiz:latest
     container_name: marvel-quiz
     restart: unless-stopped

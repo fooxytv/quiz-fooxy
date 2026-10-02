@@ -227,6 +227,7 @@ non-zero, rather than claiming success.
 | `./scripts/logs.sh [service]` | follow the logs (`quiz` by default, or `tunnel`) |
 | `./scripts/backup.sh [dir]` | consistent SQLite snapshot plus the word list |
 | `./scripts/local.sh` | run it locally in Docker, no Cloudflare needed |
+| `./scripts/local.sh version` | is the container running your current code? |
 | `./scripts/doctor.sh` | collect versions and logs when something will not start |
 
 `deploy.sh` warns if `CF_ACCESS_AUD` or `CF_ACCESS_TEAM_DOMAIN` are still unset
@@ -246,6 +247,23 @@ npm run dev              # http://localhost:3000 and /admin via the loopback byp
 `npm run dev` sets `ADMIN_DEV_BYPASS=1`, which lets **loopback requests only**
 reach the admin portal with no Access token. Never set it on the deployed
 container.
+
+## Which build am I running?
+
+Every image is stamped with the commit it was built from, so "did my change
+actually deploy?" is never a guess:
+
+```bash
+./scripts/local.sh version
+# working tree : a086ec4
+# container    : 9723b6d
+# => BEHIND. The container is not running your current code:
+#    ./scripts/local.sh
+```
+
+It is also on `/healthz`, in the server's startup log, and in small print at the
+bottom of the host screen. **`public/` is baked into the image**, so any change to
+the player or host pages needs a rebuild — `./scripts/local.sh` does that.
 
 ## When a build or start fails
 
@@ -395,7 +413,7 @@ throws, which is how residue got left the first time.
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-A hundred and twenty-six checks against a live server (`test/smoke.mjs`), driving two players at
+A hundred and twenty-nine checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the

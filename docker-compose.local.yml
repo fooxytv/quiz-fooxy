@@ -12,7 +12,11 @@ name: marvel-quiz-local
 
 services:
   quiz:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_SHA: "${BUILD_SHA:-local}"
+        BUILD_AT: "${BUILD_AT:-local}"
     image: marvel-quiz:local
     container_name: marvel-quiz-local
     restart: unless-stopped

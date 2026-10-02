@@ -28,6 +28,8 @@ try {
 // health
 r = await call("/healthz");
 check("healthz responds", r.status === 200 && r.data.ok);
+check("healthz reports which build is running", !!r.data.build && !!r.data.build.sha,
+  `build=${r.data.build && r.data.build.sha}`);
 
 /* The suite assumes a clean lobby, so it makes one. This also means it can be
    re-run against a long-lived container without tripping over its own leftovers. */
@@ -345,6 +347,7 @@ for (const [what, needle] of [
   ["the bought-letters strip is rendered", 'class="known"'],
   ["auto-advance is scheduled", "autoNextTimer = setTimeout(goNext"],
   ["the sound control is armed", "Sfx?.button("],
+  ["the last word advances to the results by itself", "state.done) {\n      finalSeen = true"],
 ]) {
   check(what, appJs.includes(needle), needle);
 }

@@ -26,6 +26,7 @@
   let wasEjected = false;  // the host reset while we were in, so say so
   let autoNextFor = -1;    // index already queued to advance, so it fires once
   let autoNextTimer = 0;
+  let finalSeen = false;   // the last word's answer has had its moment on screen
 
   const $ = (id) => document.getElementById(id);
   const view = $("view");
@@ -80,6 +81,7 @@
   function onEjected() {
     clearTimeout(autoNextTimer);
     autoNextFor = -1;
+    finalSeen = false;
     hadJoined = false;
     wasEjected = true;
     typed = "";
@@ -141,7 +143,9 @@
     if (state.joined === false || !state.name) return renderJoin();
     if (state.waiting) return renderLobby();
     if (state.counting) return renderCountdown();
-    if (state.done) return renderFinish();
+    /* The last word still gets to show its answer and trivia before the results
+       screen takes over -- it used to be skipped straight past. */
+    if (state.done && finalSeen) return renderFinish();
     renderPlay();
   }
 
@@ -173,6 +177,8 @@
       store(LS_NAME, name);
       try {
         wasEjected = false;
+        finalSeen = false;
+        autoNextFor = -1;
         adopt(await api("/api/join", { name }));
         focusFirstKey();
       } catch (e) { toast(e.message); }
@@ -275,10 +281,11 @@
     if (closed) {
       $("nextBtn").onclick = goNext;
       /*
-       * Both outcomes carry on by themselves. A miss gets longer on screen,
-       * because the answer you got wrong is the one worth reading.
+       * Every word carries on by itself, the last one included -- that one hands
+       * over to the results screen. A miss gets longer, because the answer you
+       * got wrong is the one worth reading.
        */
-      if (!state.isLast && autoNextFor !== c.index) {
+      if (autoNextFor !== c.index) {
         autoNextFor = c.index;
         clearTimeout(autoNextTimer);
         autoNextTimer = setTimeout(goNext, c.status === "win" ? 2600 : 4200);
@@ -383,6 +390,12 @@
   async function goNext() {
     if (busy) return;
     clearTimeout(autoNextTimer);
+    /* Nothing left to advance to: hand over to the results. */
+    if (state && state.done) {
+      finalSeen = true;
+      render();
+      return;
+    }
     busy = true;
     try {
       typed = "";
@@ -406,10 +419,12 @@
       <div class="answer-shout">${esc(c.answer || "")}</div>
       ${c.fact ? `<div class="fact">${esc(c.fact)}</div>` : ""}
       <div class="row">
-        <button class="btn" id="nextBtn" type="button">${state.isLast ? "Finish" : "Go now"}</button>
+        <button class="btn" id="nextBtn" type="button">${state.done ? "See my results" : "Go now"}</button>
         <span class="meta mono-num">${state.solved}/${state.puzzleCount} solved &middot; ${fmt(state.totalMs)} on the clock</span>
       </div>
-      ${state.isLast ? "" : `<p class="meta" style="margin:10px 0 0">Carrying on by itself in ${won ? "a moment" : "a few seconds"} &mdash; no clock runs until the next word appears.</p>`}
+      <p class="meta" style="margin:10px 0 0">${state.done
+        ? "That was the last one. Results coming up."
+        : `Carrying on by itself in ${won ? "a moment" : "a few seconds"} &mdash; no clock runs until the next word appears.`}</p>
     </div>`;
   }
 
@@ -433,6 +448,7 @@
           </div>
           <div class="hr"></div>
           <p class="meta" style="margin:0">That's your run in. Standings are on the host's screen.</p>
+      <p class="meta" style="margin:8px 0 0;opacity:.6;font-size:11px">build ${esc((state.build && state.build.sha) || "dev")}</p>
         </div>
       </div>`;
   }

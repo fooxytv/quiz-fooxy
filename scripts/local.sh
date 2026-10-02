@@ -7,6 +7,7 @@
 #   ./scripts/local.sh logs   follow the container log
 #   ./scripts/local.sh down   stop and remove it
 #   ./scripts/local.sh fresh  wipe the local database and restart clean
+#   ./scripts/local.sh version is the running container actually your code?
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -31,9 +32,16 @@ lan_ip() {
   echo ""
 }
 
+stamp() {
+  BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo local)$(git diff --quiet 2>/dev/null || echo -dirty)"
+  BUILD_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  export BUILD_SHA BUILD_AT
+}
+
 start() {
   local bind="$1" url="$2"
-  echo "==> Building the image from this working tree"
+  stamp
+  echo "==> Building the image from this working tree  (${BUILD_SHA})"
   LOCAL_BIND="$bind" LOCAL_PORT="$PORT" LOCAL_PUBLIC_URL="$url" "${COMPOSE[@]}" build --pull
 
   echo "==> Starting"
@@ -59,6 +67,7 @@ start() {
   fi
 
   echo
+  echo "    Running  $(curl -fsS "http://127.0.0.1:${PORT}/healthz" 2>/dev/null | sed -n 's/.*"sha":"\([^"]*\)".*/build \1/p')"
   echo "    Players  $url"
   echo "    Host     $url/admin"
   echo
@@ -93,6 +102,20 @@ case "${1:-up}" in
     fi
     echo "==> Running the suite against the container on :${PORT}"
     BASE="http://127.0.0.1:${PORT}" node test/smoke.mjs
+    ;;
+  version)
+    want="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)$(git diff --quiet 2>/dev/null || echo -dirty)"
+    have="$(curl -fsS "http://127.0.0.1:${PORT}/healthz" 2>/dev/null | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')"
+    echo "working tree : ${want}"
+    echo "container    : ${have:-not running}"
+    if [[ -z "$have" ]]; then
+      echo "=> Not running. Start it: ./scripts/local.sh"
+    elif [[ "$have" == "$want" ]]; then
+      echo "=> Up to date."
+    else
+      echo "=> BEHIND. The container is not running your current code:"
+      echo "   ./scripts/local.sh"
+    fi
     ;;
   logs)
     exec "${COMPOSE[@]}" logs -f --tail 100 quiz

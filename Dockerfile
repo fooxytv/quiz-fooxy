@@ -1,7 +1,12 @@
 # node:24 ships SQLite built in (node:sqlite), so there is no native module to compile
 FROM node:24-bookworm-slim
 
-ENV NODE_ENV=production \
+ARG BUILD_SHA=unknown
+ARG BUILD_AT=unknown
+
+ENV BUILD_SHA=$BUILD_SHA \
+    BUILD_AT=$BUILD_AT \
+    NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data
 

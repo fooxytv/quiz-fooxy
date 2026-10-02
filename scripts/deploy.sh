@@ -37,7 +37,9 @@ COMPOSE=(docker compose)
 docker compose version >/dev/null 2>&1 || COMPOSE=(docker-compose)
 
 echo "==> Building"
-"${COMPOSE[@]}" build --pull
+BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+BUILD_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+  "${COMPOSE[@]}" build --pull
 
 echo "==> Starting"
 "${COMPOSE[@]}" up -d

@@ -23,6 +23,7 @@ const SKIP_CHOICES = [0, 1, 2, 3, 5];
 const revealCost = (limitMs) => (limitMs ? Math.max(10000, Math.round(limitMs / 6)) : 15000);
 const COUNTDOWN_CHOICES = [3000, 5000, 10000, 30000];
 const PID_COOKIE = "mwq_pid";
+const BUILD = { sha: process.env.BUILD_SHA || "dev", at: process.env.BUILD_AT || "dev" };
 
 const app = express();
 app.set("trust proxy", true);
@@ -244,6 +245,7 @@ function buildBoard() {
       have: puzzles.filter((p) => (p.tier || "").toUpperCase() === tier).length,
     })),
     demo: DEMO,
+    build: BUILD,
     /* So the host can see whether the pool is deep enough for the length chosen. */
     expectedShared: Math.round(expectedOverlap(puzzles, count) * 10) / 10,
     maxTries: MAX_TRIES,
@@ -614,7 +616,8 @@ app.get("/assets/:file", (req, res) => {
   });
 });
 
-app.get("/healthz", (req, res) => res.json({ ok: true, round: store.activeRound().id }));
+app.get("/healthz", (req, res) =>
+  res.json({ ok: true, round: store.activeRound().id, build: BUILD }));
 
 app.get("/admin", requireAdmin, (req, res) => res.sendFile(path.join(__dirname, "../public/admin.html")));
 
@@ -742,6 +745,7 @@ server.listen(PORT, () => {
         ? "DEV BYPASS (loopback only)"
         : "SEALED - set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD";
   console.log(`marvel-quiz listening on :${PORT}`);
+  console.log(`  build        ${BUILD.sha}  ${BUILD.at}`);
   console.log(`  public url   ${PUBLIC_URL}`);
   console.log(`  data dir     ${store.DATA_DIR}`);
   console.log(`  pool         ${store.loadPuzzles().length} words`);

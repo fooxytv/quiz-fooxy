@@ -466,7 +466,8 @@
         ${settingsMarkup()}
         ${blockedMarkup()}
         ${hostbarMarkup()}
-        <div class="notice">Ranking: most words solved, then fastest total time, then fewest guesses. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.</div>
+        <div class="notice">Ranking: most words solved, then fastest total time, then fewest guesses. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.
+        <span style="opacity:.55">Running build <b>${esc((board.build && board.build.sha) || "dev")}</b>, made ${esc((board.build && board.build.at) || "?")}. If that is not your latest commit, rebuild: <code>./scripts/local.sh</code></span></div>
       </div>`;
     const fb = $("focusBtn");
     if (fb) fb.onclick = () => setFocus(true);
