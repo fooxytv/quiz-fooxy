@@ -138,6 +138,19 @@ ok("repeated wrong guesses get locked out", !!locked && locked.data.error === "l
 r = await call("/api/admin/login", { method: "POST", body: { password: PW } });
 ok("the lockout applies even to the correct password", r.status === 429, `status=${r.status}`);
 
+/* The raw filenames must not bypass the check. */
+for (const p of ["/admin.html", "/login.html"]) {
+  const raw = await call(p);
+  ok(`${p} does not serve the host UI unauthenticated`,
+    raw.status === 302 || !raw.text.includes('id="tabBoard"'), `status=${raw.status}`);
+}
+
+/* An auth-sensitive page must not be cached, or a stale login page looks like a
+   rejected password. */
+const hdr = await fetch(B + "/admin", { redirect: "manual" });
+ok("the host page is not cacheable",
+  /no-store/i.test(hdr.headers.get("cache-control") || ""), hdr.headers.get("cache-control"));
+
 r = await call("/api/admin/logout", { method: "POST", cookie: session });
 ok("logout responds", r.status === 200);
 

@@ -394,9 +394,14 @@ Generate one that cannot be mangled: `openssl rand -base64 32 | tr -dc 'A-Za-z0-
 start. After editing `.env`: `docker compose up -d` (or `docker compose restart quiz`).
 
 **You are locked out.** Five wrong tries from your address starts a timeout that
-doubles, and **it applies to the correct password too** — so once you are locked,
-the right password is refused as well. The page says so ("Too many attempts. Try
-again in Ns."). `docker compose restart quiz` clears it immediately.
+doubles up to five minutes, and **it applies to the correct password too** — so
+once you are locked, the right password is refused as well. The page says so
+("Too many attempts. Try again in Ns."). Fifteen quiet minutes clears the slate,
+or `docker compose restart quiz` does it immediately.
+
+**You are on `/admin.html` rather than `/admin`.** Both filenames now redirect to
+`/admin`; before, the static middleware served the host shell straight out with no
+check, so it looked like a host screen that did not work instead of a login form.
 
 `npm run test:auth` boots a throwaway server with a known password and checks all
 of the above, including that the websocket refuses an unauthenticated upgrade and

@@ -667,11 +667,22 @@ app.get("/assets/:file", (req, res) => {
 app.get("/healthz", (req, res) =>
   res.json({ ok: true, round: store.activeRound().id, build: BUILD }));
 
+/*
+ * The static middleware below would otherwise hand out admin.html and login.html
+ * by their raw filenames, skipping the check entirely -- so /admin.html served the
+ * whole host shell to anyone, and landing on it looked like a broken host screen
+ * rather than a login prompt. Both now come only through /admin.
+ */
+app.get(["/admin.html", "/login.html"], (req, res) => res.redirect(302, "/admin"));
+
 /* Unauthenticated hosts get the login form, not a JSON refusal they cannot act on. */
 app.get("/admin", async (req, res) => {
+  /* Never cached: a revalidated copy of the login page after a successful login
+     looks exactly like the password being rejected. */
+  res.set("Cache-Control", "no-store, must-revalidate");
   const who = await verifyAdmin(req);
-  if (who) return res.sendFile(ADMIN_PAGE);
-  if (passwordConfigured) return res.sendFile(LOGIN_PAGE);
+  if (who) return res.sendFile(ADMIN_PAGE, { cacheControl: false });
+  if (passwordConfigured) return res.sendFile(LOGIN_PAGE, { cacheControl: false });
   res.status(403).type("text/plain").send(sealedMessage());
 });
 

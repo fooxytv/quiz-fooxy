@@ -131,14 +131,22 @@ export function passwordMatches(given) {
 
 /* ---------------------------------------------------------- rate limiting --- */
 
-const attempts = new Map();   // ip -> { fails, until }
+const attempts = new Map();   // ip -> { fails, until, last }
 const MAX_FAILS = 5;
 const LOCK_BASE_MS = 30000;
+/* Capped at five minutes, not an hour: the realistic attacker here is the host
+   mistyping their own long password, and a long lockout on their own screen does
+   more damage than five tries per five minutes does good. */
+const LOCK_MAX_MS = 5 * 60 * 1000;
+/* A quiet spell wipes the slate, so a typo earlier today cannot make the correct
+   password wait. Without this, `fails` only ever grew and the delay doubled for
+   the life of the process -- which felt like the password working intermittently. */
+const FORGIVE_MS = 15 * 60 * 1000;
 
 setInterval(() => {
   const now = Date.now();
   for (const [ip, rec] of attempts) {
-    if (rec.until < now - 10 * 60 * 1000) attempts.delete(ip);
+    if (Math.max(rec.until, rec.last || 0) < now - FORGIVE_MS) attempts.delete(ip);
   }
 }, 60000).unref();
 
@@ -151,12 +159,14 @@ export function lockedFor(req) {
 
 export function noteFailure(req) {
   const ip = rawIp(req);
-  const rec = attempts.get(ip) || { fails: 0, until: 0 };
+  const now = Date.now();
+  let rec = attempts.get(ip);
+  if (!rec || now - (rec.last || 0) > FORGIVE_MS) rec = { fails: 0, until: 0, last: now };
   rec.fails += 1;
+  rec.last = now;
   if (rec.fails >= MAX_FAILS) {
-    /* Doubling each time past the threshold, capped at an hour. */
     const over = rec.fails - MAX_FAILS;
-    rec.until = Date.now() + Math.min(60 * 60 * 1000, LOCK_BASE_MS * Math.pow(2, over));
+    rec.until = now + Math.min(LOCK_MAX_MS, LOCK_BASE_MS * Math.pow(2, over));
   }
   attempts.set(ip, rec);
   return rec;
