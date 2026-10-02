@@ -290,6 +290,27 @@ It is also on `/healthz`, in the server's startup log, and in small print at the
 bottom of the host screen. **`public/` is baked into the image**, so any change to
 the player or host pages needs a rebuild — `./scripts/local.sh` does that.
 
+## Up but unreachable
+
+The commonest cause by a distance: the connector is healthy and no DNS record
+exists, because a **Public Hostname** was never added to the tunnel. A healthy
+connector only means cloudflared is talking to Cloudflare — it routes nothing by
+itself.
+
+```bash
+./scripts/doctor.sh
+# --- does the public hostname resolve? ---
+# quiz.fooxy.tv -> NO DNS RECORD
+#    Add it in Zero Trust > Networks > Tunnels > your tunnel >
+#    Public Hostname > Add a public hostname:
+#        Type HTTP     URL quiz:3000
+```
+
+`doctor.sh` resolves `PUBLIC_URL`, probes the app from inside its own container,
+checks the tunnel has registered a connection, looks for origin-unreachable errors
+in its log, and prints both logs. It never prints secrets — tokens and passwords
+show only as "set (N chars)".
+
 ## When a build or start fails
 
 ```bash
