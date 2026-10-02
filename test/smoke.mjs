@@ -26,6 +26,19 @@ const check = (l, c, e) => { if (!c) failures++; ok(l, c, e); };
 let r = await call("/healthz");
 check("healthz responds", r.status === 200 && r.data.ok);
 
+/* The suite assumes a clean lobby, so it makes one. This also means it can be
+   re-run against a long-lived container without tripping over its own leftovers. */
+r = await call("/api/admin/reset", "POST");
+check("suite starts from a clean lobby", r.status === 200 && r.data.ok === true);
+for (const k of ["me", "other"]) {
+  as(k);
+  const b = await call("/api/admin/board");
+  for (const blocked of b.data?.blocked || []) {
+    await call("/api/admin/unkick", "POST", { playerId: blocked.id });
+  }
+}
+as("me");
+
 // anonymous state
 r = await call("/api/state");
 check("anonymous state is not joined", r.data.joined === false, `puzzles=${r.data.puzzleCount}`);
@@ -177,6 +190,33 @@ check("board shows the re-entered player at zero",
   r.data.players.length === 1 && r.data.players[0].solved === 0);
 r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
 check("a second round can be started", r.data.ok === true);
+
+// ---- a reset must not quietly readmit anyone the host removed -------------
+// The reset above ejected everyone, so Rival has to come back in first.
+as("other");
+r = await call("/api/join", "POST", { name: "Rival" });
+check("ejected player can rejoin deliberately", r.status === 200 && r.data.removed === false);
+r = await call("/api/admin/board");
+const victim = r.data.players.find((p) => p.name === "Rival");
+if (victim) {
+  await call("/api/admin/kick", "POST", { playerId: victim.id });
+  r = await call("/api/state");
+  check("removed player is out", r.data.removed === true);
+  r = await call("/api/admin/reset", "POST");
+  check("reset keeps the removal", r.data.blockedKept >= 1, `blockedKept=${r.data.blockedKept}`);
+  r = await call("/api/admin/board");
+  const stillBlocked = r.data.blocked.find((b) => b.id === victim.id);
+  check("still on the removed list after a reset", !!stillBlocked);
+  check("removed list remembers the name", stillBlocked && stillBlocked.name === "Rival",
+    `name=${stillBlocked && stillBlocked.name}`);
+  r = await call("/api/join", "POST", { name: "Rival" });
+  check("a removed player rejoining is still removed", r.data.removed === true);
+  r = await call("/api/admin/board");
+  check("removed player stays off the board", !r.data.players.some((p) => p.id === victim.id));
+} else {
+  check("rival present to remove", false, "could not find the second player");
+}
+as("me");
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -169,14 +169,14 @@
         <span>${esc(b.name || "Unknown")}</span>
         <button class="kick" data-unkick="${esc(b.id)}" type="button">Let back in</button>
       </span>`).join("")}</div>
-      <p class="meta" style="margin:10px 0 0">They see a "removed by the host" screen and stop scoring. Letting someone back in restores the run they had.</p>
+      <p class="meta" style="margin:10px 0 0">They see a "removed by the host" screen and stop scoring. A reset does not let them back in &mdash; only this button does.</p>
     </div>`;
   }
 
   function hostbarMarkup() {
     return `<div class="hostbar">
-      <button class="btn ghost sm" id="resetBtn" type="button">Reset to the lobby</button>
-      <span class="meta">Wipes every run and puts everyone back in the lobby, ready for another go. Tap twice to confirm.</span>
+      <button class="btn ghost sm" id="resetBtn" type="button">Reset and kick everyone</button>
+      <span class="meta">Clears the board and throws everyone out to the join screen &mdash; they each have to join again. Anyone you removed <b>stays removed</b>. Tap twice to confirm.</span>
       <p class="meta" id="hostMsg"></p>
     </div>`;
   }
@@ -187,7 +187,13 @@
         const ms = Number(b.dataset.limit);
         if (ms === board.limitMs) return;
         root.querySelectorAll("[data-limit]").forEach((x) => x.setAttribute("aria-pressed", String(Number(x.dataset.limit) === ms)));
-        try { await api("/api/admin/limit", { method: "POST", body: { limitMs: ms } }); hostMsg(ms ? `Time limit is now ${limitLabel(ms)} per word.` : "Time limit off.", "ok"); }
+        try {
+          await api("/api/admin/limit", { method: "POST", body: { limitMs: ms } });
+          board.limitMs = ms;
+          const est = $("estimate");
+          if (est) est.innerHTML = estimate();
+          hostMsg(ms ? `Time limit is now ${limitLabel(ms)} per word.` : "Time limit off.", "ok");
+        }
         catch (e) { hostMsg(e.message, "err"); }
       };
     });
@@ -220,7 +226,7 @@
     if (rb) wireDanger(rb, "Tap again to wipe the board", async () => {
       await api("/api/admin/reset", { method: "POST" });
       autoFlipped = false;
-      hostMsg("Back in the lobby. Start again when everyone's ready.", "ok");
+      hostMsg("Everyone is out and the board is clear. They need to join again.", "ok");
     });
 
     root.querySelectorAll("[data-kick]").forEach((b) => {

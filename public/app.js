@@ -24,6 +24,7 @@
   let lastTick = null;     // last countdown second announced, so each pips once
   let lastPhase = null;    // to fire the go sting exactly once
   let lastOutcome = -1;    // puzzle index whose result has already been celebrated
+  let wasEjected = false;  // the host reset while we were in, so say so
 
   const $ = (id) => document.getElementById(id);
   const view = $("view");
@@ -73,23 +74,17 @@
   }
 
   /*
-   * A host reset wipes the player rows, so the server stops recognising us. If we
-   * were playing a moment ago, walk straight back in under the same name rather
-   * than dumping someone back on the join screen mid-session.
+   * A host reset ejects everyone. The page drops back to the join screen and the
+   * player has to opt in again deliberately -- it does not slip them back into
+   * the lobby under their old name.
    */
-  async function rejoinAfterReset() {
-    const name = store(LS_NAME);
-    if (!hadJoined || !name) return false;
-    try {
-      typed = "";
-      lastTick = null;
-      lastPhase = null;
-      lastOutcome = -1;
-      adopt(await api("/api/join", { name }));
-      return true;
-    } catch (e) {
-      return false;
-    }
+  function onEjected() {
+    hadJoined = false;
+    wasEjected = true;
+    typed = "";
+    lastTick = null;
+    lastPhase = null;
+    lastOutcome = -1;
   }
 
   /* ---------------------------------------------------------------- clock --- */
@@ -154,6 +149,9 @@
     const limit = state.limitMs;
     view.innerHTML = `
       <div class="wrap-narrow">
+        ${wasEjected ? `<div class="ejected">
+          <b>The host reset the quiz.</b> Everyone is out and the board is clear. Join again below when you're ready for the next run.
+        </div>` : ""}
         <div class="panel panel-pad halftone">
           <h1 class="joinh1" style="font-size:40px;line-height:.92;margin-bottom:8px">${state.puzzleCount} Marvel words.<br>Six guesses each.</h1>
           <p class="meta" style="margin:0 0 6px">Wordle rules, Marvel answers, 4 to 8 letters. Every word comes with a clue, so you don't need to have seen all thirty-odd films.</p>
@@ -173,6 +171,7 @@
       if (!name) { input.focus(); return toast("Name first"); }
       store(LS_NAME, name);
       try {
+        wasEjected = false;
         adopt(await api("/api/join", { name }));
         focusFirstKey();
       } catch (e) { toast(e.message); }
@@ -231,7 +230,7 @@
           <div class="puzhead">
             <div class="counter mono-num">${c.index + 1}<small>of ${state.puzzleCount}</small></div>
             <div class="hintcol" style="min-width:0;flex:1 1 auto">
-              <div class="cat">${esc(c.category)} &middot; ${c.length} letters</div>
+              <div class="cat">${c.tier ? `<span class="tier t${esc(c.tier.replace(/\s+/g, ""))}">${esc(c.tier)}</span>` : ""}${esc(c.category)} &middot; ${c.length} letters</div>
               <div class="hint">${esc(c.hint)}</div>
             </div>
             <div class="clockcol" style="text-align:right;flex:0 0 auto">
@@ -491,11 +490,7 @@
     refreshing = true;
     try {
       const next = await api("/api/state");
-      if (next.joined === false && hadJoined) {
-        refreshing = false;
-        if (await rejoinAfterReset()) return;
-        hadJoined = false;
-      }
+      if (next.joined === false && hadJoined) onEjected();
       adopt(next);
     } catch (e) {
       /* offline; the socket will nudge us when it reconnects */
@@ -519,6 +514,11 @@
     ws.onmessage = (ev) => {
       let msg = null;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === "ejected") {
+        onEjected();
+        refresh();
+        return;
+      }
       if (msg.type === "round" || msg.type === "removed" || msg.type === "reinstated") {
         typed = "";
         /* Flip to the countdown immediately rather than after a round trip. */

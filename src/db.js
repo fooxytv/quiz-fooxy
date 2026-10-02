@@ -59,8 +59,9 @@ db.exec(`
     PRIMARY KEY (player_id, puzzle_idx)
   );
   CREATE TABLE IF NOT EXISTS blocklist (
-    player_id TEXT PRIMARY KEY,
-    blocked_at INTEGER NOT NULL
+    player_id  TEXT PRIMARY KEY,
+    blocked_at INTEGER NOT NULL,
+    name       TEXT
   );
 `);
 
@@ -72,6 +73,7 @@ function ensureColumn(table, name, ddl) {
 ensureColumn("rounds", "phase", "phase TEXT NOT NULL DEFAULT 'lobby'");
 ensureColumn("rounds", "starts_at", "starts_at INTEGER");
 ensureColumn("rounds", "countdown_ms", "countdown_ms INTEGER NOT NULL DEFAULT 5000");
+ensureColumn("blocklist", "name", "name TEXT");
 
 /* ---------- word list ---------- */
 
@@ -189,9 +191,12 @@ export function isBlocked(id) {
   return !!db.prepare("SELECT 1 FROM blocklist WHERE player_id = ?").get(id);
 }
 
-export function blockPlayer(id) {
+/* The name is copied onto the blocklist row: a reset deletes the player record,
+   and the host still needs to know who they removed. */
+export function blockPlayer(id, name) {
   tx(() => {
-    db.prepare("INSERT OR REPLACE INTO blocklist (player_id, blocked_at) VALUES (?, ?)").run(id, Date.now());
+    db.prepare("INSERT OR REPLACE INTO blocklist (player_id, blocked_at, name) VALUES (?, ?, ?)")
+      .run(id, Date.now(), name || null);
     db.prepare("UPDATE players SET blocked = 1 WHERE id = ?").run(id);
   });
 }
@@ -205,7 +210,7 @@ export function unblockPlayer(id) {
 
 export function blockedPlayers() {
   return db.prepare(`
-    SELECT b.player_id AS id, b.blocked_at, p.name
+    SELECT b.player_id AS id, b.blocked_at, COALESCE(b.name, p.name) AS name
     FROM blocklist b LEFT JOIN players p ON p.id = b.player_id
     ORDER BY b.blocked_at DESC
   `).all();

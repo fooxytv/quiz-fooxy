@@ -32,6 +32,11 @@ Two things are deliberately kept out of the browser:
 
 ## How a session runs
 
+Twenty words, six guesses each, in five difficulty tiers: three warm-ups where
+the clue hands it to you, then easy, steady, tricky and hard, where the clue
+stops helping and starts hinting. The tier shows on the player's screen so the
+ramp is visible rather than just felt.
+
 Players land in a **lobby**: no clue, no clock, nothing to do but wait. The
 server does not even deal them a puzzle yet. When the host presses **Start**,
 everyone gets the same countdown and the first word appears for all of them at a
@@ -190,13 +195,21 @@ account.
 2. People scan the QR, type a name, and land in the lobby. Names appear as they
    arrive. Nobody's clock is running.
 3. Pick a **time limit per word** (default 90s, or off) and a **countdown**
-   length (3s, 5s, 10s or 30s).
+   length (3s, 5s, 10s or 30s). The settings panel prints a live estimate of how
+   long the round will take, so you can fit the slot:
+
+   | 20 words at | typically | worst case |
+   |---|---|---|
+   | 45s | ~10 min | 18 min |
+   | 60s | ~13 min | 23 min |
+   | 90s | ~18 min | 33 min |
 4. Press **Start the quiz**. Everyone sees the same countdown; the host view
    flips itself to the leaderboard so you can watch.
 5. **Remove** takes someone off the board; they can be let back in, keeping the
    run they had.
-6. **Reset to the lobby** wipes every run and gathers everyone again for another
-   go. Players' pages return to the lobby on their own, keeping their names.
+6. **Reset and kick everyone** clears the board and throws every player out to
+   the join screen; each of them has to join again deliberately. Anyone you
+   removed **stays removed** — only *Let back in* undoes that.
 
 Destructive buttons need two taps — no accidental mid-session wipe.
 
@@ -204,9 +217,10 @@ Destructive buttons need two taps — no accidental mid-session wipe.
 
 The **Words** tab in the admin portal edits the list as JSON, saved to
 `DATA_DIR/words.json`. Answers are 4–8 letters, A–Z only, each needs a clue, and
-a clue containing its own answer is refused. Changes apply on the **next reset**,
+a clue containing its own answer is refused, and `tier` is free text shown as a
+badge. Changes apply on the **next reset**,
 so a round in progress is never disturbed. Delete the file to fall back to the
-twelve built-in puzzles.
+twenty built-in puzzles.
 
 ## Layout
 
@@ -253,10 +267,12 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-Fifty-two checks against a live server (`test/smoke.mjs`), driving two players at
+Sixty-six checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the
 server-enforced timeout, kick and reinstate, word-list validation, and a reset
-returning the round to the lobby. One check asserts that no answer appears
-anywhere in the board payload.
+returning the round to the lobby and ejecting everyone while keeping removals.
+One check asserts that no answer appears anywhere in the board payload. The
+suite resets the round itself at the start, so it is safe to re-run against a
+long-lived container.

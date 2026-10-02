@@ -348,15 +348,19 @@ app.post("/api/admin/reset", requireAdmin, (req, res) => {
   const old = store.activeRound();
   store.wipeRound(old.id);
   const fresh = store.newRound(old.limit_ms, old.countdown_ms);
+  /* Everyone is out, not merely cleared: every page returns to the join screen
+     and has to opt back in. Removals are deliberately NOT lifted. */
+  broadcastAll({ type: "ejected", round: fresh.id });
   broadcastRound();
   broadcastBoard();
-  res.json({ ok: true, round: fresh.id });
+  res.json({ ok: true, round: fresh.id, blockedKept: store.blockedPlayers().length });
 });
 
 app.post("/api/admin/kick", requireAdmin, (req, res) => {
   const id = String(req.body?.playerId || "");
   if (!/^[a-f0-9]{32}$/.test(id)) return res.status(400).json({ error: "bad_player" });
-  store.blockPlayer(id);
+  const victim = store.getPlayer(id);
+  store.blockPlayer(id, victim ? victim.name : null);
   notifyPlayer(id, { type: "removed" });
   broadcastBoard();
   res.json({ ok: true });
@@ -495,6 +499,13 @@ function broadcastRound() {
     limitMs: round.limit_ms,
     serverNow: Date.now(),
   };
+  for (const set of playerSockets.values()) {
+    for (const ws of set) send(ws, payload);
+  }
+}
+
+/** Every connected player page, whoever they are. */
+function broadcastAll(payload) {
   for (const set of playerSockets.values()) {
     for (const ws of set) send(ws, payload);
   }

@@ -322,3 +322,20 @@ body.art-on #backdrop{opacity:1}
 @keyframes hover{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media (prefers-reduced-motion:reduce){.emblem-big{animation:none}}
 .gobadge{display:inline-flex;align-items:center;color:var(--ink);flex:0 0 auto}
+.ejected{
+  border:2px solid var(--gold);border-radius:3px;
+  background:color-mix(in srgb,var(--gold) 14%,var(--surface));
+  padding:12px 14px;margin-bottom:16px;font-size:14px;line-height:1.5;
+}
+.ejected b{display:block;font-family:"Big Shoulders Display",sans-serif;font-weight:800;
+  font-size:19px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px}
+.tier{
+  display:inline-block;font-family:"Chivo",sans-serif;font-weight:900;font-size:9px;
+  letter-spacing:.12em;text-transform:uppercase;border-radius:2px;padding:1px 5px;margin-right:7px;
+  color:var(--on-solid);background:var(--muted);vertical-align:1px;
+}
+.tier.tWARMUP{background:var(--green)}
+.tier.tEASY{background:var(--green)}
+.tier.tSTEADY{background:var(--azure)}
+.tier.tTRICKY{background:var(--gold)}
+.tier.tHARD{background:var(--red)}
