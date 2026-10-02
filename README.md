@@ -372,6 +372,32 @@ so it is built accordingly:
 
 There is a **Sign out** button on the host screen for a shared machine.
 
+### If the password will not work
+
+Three things cause this, none of them the password being "wrong":
+
+**The value got mangled by `.env`.** A `#` truncates it from that point, a `$` can
+be expanded, quotes may be kept or stripped, and trailing spaces survive. The
+server prints the length it actually received at startup — compare it with what you
+typed:
+
+```bash
+docker compose logs quiz | grep "admin auth"
+#   admin auth   password  (password is 8 characters as received)
+#   !! The password this process received looks mangled:
+#      - contains '#', which .env may treat as a comment
+```
+
+Generate one that cannot be mangled: `openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 24`
+
+**The container has not read it.** The process reads the environment once, at
+start. After editing `.env`: `docker compose up -d` (or `docker compose restart quiz`).
+
+**You are locked out.** Five wrong tries from your address starts a timeout that
+doubles, and **it applies to the correct password too** — so once you are locked,
+the right password is refused as well. The page says so ("Too many attempts. Try
+again in Ns."). `docker compose restart quiz` clears it immediately.
+
 `npm run test:auth` boots a throwaway server with a known password and checks all
 of the above, including that the websocket refuses an unauthenticated upgrade and
 that the player pages stay open.

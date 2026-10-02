@@ -9,7 +9,7 @@ import QRCode from "qrcode";
 import { MAX_TRIES, clientMeta, validatePuzzles, buildSequence, expectedOverlap, TIER_ORDER, COUNT_CHOICES, DEMO } from "./words.js";
 import { mark, resultCode, rowMs, compareEntries } from "./game.js";
 import {
-  requireAdmin, verifyAdmin, parseCookies, authMode, sealedMessage,
+  requireAdmin, verifyAdmin, parseCookies, authMode, sealedMessage, passwordInfo,
   passwordConfigured, accessConfigured, insecureLocal,
   passwordMatches, mintSession, ADMIN_COOKIE, sessionMs,
   lockedFor, noteFailure, noteSuccess,
@@ -797,7 +797,16 @@ server.listen(PORT, () => {
   console.log(`  data dir     ${store.DATA_DIR}`);
   console.log(`  pool         ${store.loadPuzzles().length} words`);
   console.log(`  theme        ${activeTheme().id}  (${loadThemes(store.DATA_DIR).length} available)`);
-  console.log(`  admin auth   ${authMode()}`);
+  const pw = passwordInfo();
+  console.log(`  admin auth   ${authMode()}${pw.set ? `  (password is ${pw.length} characters as received)` : ""}`);
+  if (pw.set && pw.warnings.length) {
+    console.log("");
+    console.log("  !! The password this process received looks mangled:");
+    for (const w of pw.warnings) console.log(`     - ${w}`);
+    console.log("     Compare that length with what you typed into .env. If it is shorter,");
+    console.log("     the value was cut; quote it or use only letters and digits.");
+    console.log("");
+  }
   if (!passwordConfigured && !accessConfigured && !insecureLocal) {
     console.log("");
     console.log("  ****************************************************************");

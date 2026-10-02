@@ -224,6 +224,23 @@ export function requireAdmin(req, res, next) {
     .catch(() => res.status(403).json({ error: "admin_only" }));
 }
 
+/**
+ * What the process actually received, without revealing it. A password that went
+ * through a .env can arrive truncated at a `#`, stripped of quotes, or with a
+ * stray trailing space -- all of which look like "the password does not work".
+ */
+export function passwordInfo() {
+  const raw = process.env.ADMIN_PASSWORD;
+  if (raw == null) return { set: false };
+  const warnings = [];
+  if (/#/.test(raw)) warnings.push("contains '#', which .env may treat as a comment");
+  if (/\$/.test(raw)) warnings.push("contains '$', which compose may try to expand");
+  if (/^["']|["']$/.test(raw)) warnings.push("starts or ends with a quote, which may have been kept literally");
+  if (/^\s|\s$/.test(raw)) warnings.push("starts or ends with whitespace");
+  if (raw.length > 0 && raw.length < 12) warnings.push(`only ${raw.length} characters`);
+  return { set: raw.length > 0, length: raw.length, warnings };
+}
+
 export function authMode() {
   if (passwordConfigured && accessConfigured) return "password + Cloudflare Access";
   if (passwordConfigured) return "password";
