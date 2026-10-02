@@ -330,6 +330,43 @@ check("the board reports the skip allowance and letter cost",
   r.data.skipsAllowed === 1 && r.data.revealCostMs > 0,
   `allowed=${r.data.skipsAllowed} cost=${r.data.revealCostMs}`);
 
+// ---- the client actually ships the features ------------------------------
+/*
+ * Several times now an edit has landed a function in app.js that nothing calls,
+ * because a replacement matched a stale string -- the lifeline buttons shipped as
+ * dead code this way. These assertions read the file the browser is served and
+ * check each feature is referenced, not merely defined.
+ */
+const appJs = await (await fetch(BASE + "/app.js")).text();
+for (const [what, needle] of [
+  ["the lifelines are rendered", "keyboard() + lifelines()"],
+  ["the buy-a-letter button is wired", 'id="revealBtn"'],
+  ["the skip button is wired", 'id="skipBtn"'],
+  ["the bought-letters strip is rendered", 'class="known"'],
+  ["auto-advance is scheduled", "autoNextTimer = setTimeout(goNext"],
+  ["the sound control is armed", "Sfx?.button("],
+]) {
+  check(what, appJs.includes(needle), needle);
+}
+const soundJs = await (await fetch(BASE + "/sound.js")).text();
+for (const [what, needle] of [
+  ["audio unlocks on any gesture", 'addEventListener("pointerdown", go, true)'],
+  ["an on-but-locked button unlocks instead of muting", "ctx.state !== \"running\""],
+  ["the label admits when it is locked", "Sound on - tap"],
+]) {
+  check(what, soundJs.includes(needle), needle);
+}
+
+const adminJs = await (await fetch(BASE + "/admin.js")).text();
+for (const [what, needle] of [
+  ["focus mode is wired", 'id="focusBtn"'],
+  ["focus hides the controls", "hideinfocus"],
+  ["the skip allowance control is wired", "data-skips"],
+  ["the board shows skips and letters bought", "p.reveals"],
+]) {
+  check(what, adminJs.includes(needle), needle);
+}
+
 // ---- themes ---------------------------------------------------------------
 r = await call("/api/theme");
 check("active theme is public", r.status === 200 && !!r.data.theme && !!r.data.theme.id);

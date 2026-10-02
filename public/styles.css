@@ -540,3 +540,6 @@ body.focus-board .useno{font-size:19px}
   padding-bottom:calc(7px + env(safe-area-inset-bottom,0px));
 }
 #exitFocus:hover,#exitFocus:focus-visible{opacity:1}
+.soundbtn.locked{border-color:var(--gold);color:var(--gold);animation:nudge 2.2s ease-in-out infinite}
+@keyframes nudge{0%,100%{opacity:1}50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){.soundbtn.locked{animation:none}}

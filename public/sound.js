@@ -31,6 +31,9 @@
 
   let ctx = null;
   let master = null;
+  let armed = false;
+  let wantsLobbyFn = null;
+  let repaint = () => {};
   let enabled = false;
   let loopOn = false;
   let timer = 0;
@@ -38,6 +41,41 @@
   let step = 0;
 
   try { enabled = localStorage.getItem(LS_KEY) === "1"; } catch (e) { enabled = false; }
+
+  /** True only when audio can actually be heard right now. */
+  function running() {
+    return !!(enabled && ctx && ctx.state === "running");
+  }
+
+  /*
+   * A browser creates an AudioContext suspended and will not resume it without a
+   * user gesture. The preference is remembered, so a page could load with
+   * `enabled` already true, build a context, fail to resume it, and sit there
+   * silent while the button claimed "Sound on" -- and pressing the button then
+   * turned it off rather than unlocking it. So: any gesture anywhere unlocks,
+   * the button unlocks rather than toggling when it is on-but-locked, and the
+   * label tells the truth in between.
+   */
+  function arm(wantsLobby) {
+    wantsLobbyFn = wantsLobby || null;
+    if (armed) return;
+    armed = true;
+    const go = () => {
+      if (!enabled || !ensure()) return;
+      if (ctx.state === "running") { settle(); return; }
+      ctx.resume().then(settle).catch(() => {});
+    };
+    const settle = () => {
+      repaint();
+      if (ctx && ctx.state === "running") {
+        document.removeEventListener("pointerdown", go, true);
+        document.removeEventListener("keydown", go, true);
+        if (wantsLobbyFn && wantsLobbyFn()) lobbyStart();
+      }
+    };
+    document.addEventListener("pointerdown", go, true);
+    document.addEventListener("keydown", go, true);
+  }
 
   function ensure() {
     if (ctx) return ctx;
@@ -182,7 +220,9 @@
   function lobbyStart() {
     if (!enabled || loopOn) return;
     if (!ensure()) return;
-    if (ctx.state === "suspended") ctx.resume();
+    /* Nothing is audible until a gesture has unlocked the context; the arm()
+       listeners will call back here once one arrives. */
+    if (ctx.state !== "running") { ctx.resume().catch(() => {}); return; }
     loopOn = true;
     step = 0;
     nextTime = ctx.currentTime + 0.12;
@@ -279,20 +319,36 @@
    */
   function button(el, wantsLobby) {
     if (!el) return;
+    wantsLobbyFn = wantsLobby || null;
     const paint = () => {
       el.setAttribute("aria-pressed", String(enabled));
-      el.textContent = enabled ? "Sound on" : "Sound off";
+      el.textContent = !enabled ? "Sound off" : running() ? "Sound on" : "Sound on - tap";
+      el.classList.toggle("locked", enabled && !running());
     };
+    repaint = paint;
+
     el.onclick = () => {
+      ensure();
+      /* On but locked: this press is the gesture, so unlock rather than mute. */
+      if (enabled && ctx && ctx.state !== "running") {
+        ctx.resume().then(() => {
+          paint();
+          confirmOn();
+          if (wantsLobbyFn && wantsLobbyFn()) lobbyStart();
+        }).catch(paint);
+        return;
+      }
       setOn(!enabled);
       paint();
       if (enabled) {
         confirmOn();
-        if (wantsLobby && wantsLobby()) lobbyStart();
+        if (wantsLobbyFn && wantsLobbyFn()) lobbyStart();
       }
     };
+
     paint();
+    arm(wantsLobby);
   }
 
-  window.Sfx = { isOn, setOn, button, confirmOn, lobbyStart, lobbyStop, tick, go, solve, fail, key };
+  window.Sfx = { isOn, running, arm, setOn, button, confirmOn, lobbyStart, lobbyStop, tick, go, solve, fail, key };
 })();

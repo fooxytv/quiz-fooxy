@@ -254,7 +254,7 @@
           </div>` : ""}
           <div class="grid" id="grid" style="--len:${c.length}">${gridRows()}</div>
           <p class="toast" id="toast"></p>
-          ${closed ? outcome() : keyboard()}
+          ${closed ? outcome() : keyboard() + lifelines()}
         </div>
         <p class="meta" style="margin-top:12px">
           Green = right letter, right spot. Amber = right letter, wrong spot.
@@ -275,14 +275,13 @@
     if (closed) {
       $("nextBtn").onclick = goNext;
       /*
-       * A solved word carries straight on: you already know you were right, and
-       * the trivia is still readable on the way past. A missed one waits for a
-       * press, because that is the answer you actually wanted to read.
+       * Both outcomes carry on by themselves. A miss gets longer on screen,
+       * because the answer you got wrong is the one worth reading.
        */
-      if (c.status === "win" && !state.isLast && autoNextFor !== c.index) {
+      if (!state.isLast && autoNextFor !== c.index) {
         autoNextFor = c.index;
         clearTimeout(autoNextTimer);
-        autoNextTimer = setTimeout(goNext, 2600);
+        autoNextTimer = setTimeout(goNext, c.status === "win" ? 2600 : 4200);
       }
     } else {
       view.querySelectorAll(".key").forEach((b) => { b.onclick = () => press(b.dataset.key); });
@@ -407,12 +406,10 @@
       <div class="answer-shout">${esc(c.answer || "")}</div>
       ${c.fact ? `<div class="fact">${esc(c.fact)}</div>` : ""}
       <div class="row">
-        <button class="btn" id="nextBtn" type="button">${state.isLast ? "Finish" : (won ? "Go now" : "Next puzzle")}</button>
+        <button class="btn" id="nextBtn" type="button">${state.isLast ? "Finish" : "Go now"}</button>
         <span class="meta mono-num">${state.solved}/${state.puzzleCount} solved &middot; ${fmt(state.totalMs)} on the clock</span>
       </div>
-      ${state.isLast ? "" : `<p class="meta" style="margin:10px 0 0">${won
-        ? "Carrying on by itself in a moment &mdash; no clock is running until the next word appears."
-        : "The clock for the next word starts when you press this."}</p>`}
+      ${state.isLast ? "" : `<p class="meta" style="margin:10px 0 0">Carrying on by itself in ${won ? "a moment" : "a few seconds"} &mdash; no clock runs until the next word appears.</p>`}
     </div>`;
   }
 

@@ -148,7 +148,13 @@ nothing is sampled, traced or transcribed from anyone's property.
 
 **Sound is off until someone turns it on** — the button is in the header, and
 switching it on plays a short rising chime so you know it took. The choice is
-remembered per device. The full lobby bed plays only on the **host** screen, which is the one
+remembered per device.
+
+Browsers create an audio context suspended and refuse to resume one without a
+user gesture, so a page loading with the preference already on would sit silent
+while the button claimed otherwise. Any click or key press unlocks it, a button
+that is on-but-locked unlocks rather than muting, and until then the label reads
+**Sound on - tap** and pulses. The full lobby bed plays only on the **host** screen, which is the one
 wired to the room's speakers; players' phones get the short effects only, because
 a dozen handsets playing the same loop a few milliseconds apart sounds like a
 fault. There is a Sound button in the header of both pages.
@@ -378,6 +384,10 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 ./scripts/local.sh && ./scripts/local.sh test
 ```
 
+It also fetches `app.js`, `admin.js` and `sound.js` and asserts each feature is
+actually *referenced*, not merely defined — the lifeline buttons once shipped as
+dead code because an edit matched a stale string, and nothing caught it.
+
 The suite drives a real server against the real local database, so it clears the
 removed list, resets the round and asserts it left nothing behind — no stray
 players, no removals, no half-finished round. That cleanup runs even if a check
@@ -385,7 +395,7 @@ throws, which is how residue got left the first time.
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-A hundred and fourteen checks against a live server (`test/smoke.mjs`), driving two players at
+A hundred and twenty-six checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the
