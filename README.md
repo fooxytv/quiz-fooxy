@@ -1,9 +1,9 @@
 # MCU Quiz
 
 A Wordle-style superhero-film quiz built for a team sprint review. People scan a
-QR code, wait in a lobby, and the host counts everyone in together. Twelve words,
-six guesses each. Most words solved wins; if that ties, the fastest total time
-takes it.
+QR code, wait in a lobby, and the host counts everyone in together. Six guesses
+per word, and everyone gets their own words. Most solved wins; if that ties, the
+fastest total time takes it.
 
 No accounts, no sign-in, no app. Open the link and type your name.
 
