@@ -680,9 +680,17 @@ app.get("/admin", async (req, res) => {
   /* Never cached: a revalidated copy of the login page after a successful login
      looks exactly like the password being rejected. */
   res.set("Cache-Control", "no-store, must-revalidate");
+  /*
+   * No validators either. Both pages live at the same URL, so a browser holding a
+   * cached login page sends If-Modified-Since and sendFile answers 304 -- and the
+   * browser re-renders the LOGIN page even though the server would now have sent
+   * the host screen. That is why logging in appeared to do nothing until a manual
+   * refresh: a hard reload skips the conditional request.
+   */
+  const noCache = { cacheControl: false, lastModified: false, etag: false };
   const who = await verifyAdmin(req);
-  if (who) return res.sendFile(ADMIN_PAGE, { cacheControl: false });
-  if (passwordConfigured) return res.sendFile(LOGIN_PAGE, { cacheControl: false });
+  if (who) return res.sendFile(ADMIN_PAGE, noCache);
+  if (passwordConfigured) return res.sendFile(LOGIN_PAGE, noCache);
   res.status(403).type("text/plain").send(sealedMessage());
 });
 

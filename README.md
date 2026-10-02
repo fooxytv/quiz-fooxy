@@ -399,6 +399,13 @@ once you are locked, the right password is refused as well. The page says so
 ("Too many attempts. Try again in Ns."). Fifteen quiet minutes clears the slate,
 or `docker compose restart quiz` does it immediately.
 
+**The page did not change when you pressed the button.** Fixed: both the login
+form and the host screen live at `/admin`, so a browser holding the cached login
+page would ask "has it changed?" and be answered `304 Not Modified` — then
+re-render the *login* page even though the server would have sent the host screen.
+A manual refresh worked because it skips that conditional request. The host page
+now sends no `Last-Modified` or `ETag` at all, so it can never be answered 304.
+
 **You are on `/admin.html` rather than `/admin`.** Both filenames now redirect to
 `/admin`; before, the static middleware served the host shell straight out with no
 check, so it looked like a host screen that did not work instead of a login form.

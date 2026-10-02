@@ -150,6 +150,23 @@ for (const p of ["/admin.html", "/login.html"]) {
 const hdr = await fetch(B + "/admin", { redirect: "manual" });
 ok("the host page is not cacheable",
   /no-store/i.test(hdr.headers.get("cache-control") || ""), hdr.headers.get("cache-control"));
+ok("the host page sends no cache validators",
+  !hdr.headers.get("last-modified") && !hdr.headers.get("etag"),
+  `last-modified=${hdr.headers.get("last-modified")} etag=${hdr.headers.get("etag")}`);
+
+/*
+ * The one that bit in practice: both pages share a URL, so a browser holding the
+ * cached login page asks "changed?" and a 304 makes it re-render the login form --
+ * which looks exactly like the password doing nothing until a manual refresh.
+ */
+const cond = await fetch(B + "/admin", {
+  headers: { Cookie: session, "If-Modified-Since": "Thu, 01 Jan 2099 00:00:00 GMT" },
+  redirect: "manual",
+});
+const condBody = await cond.text();
+ok("an authenticated request is never answered 304", cond.status === 200, `status=${cond.status}`);
+ok("a conditional request still gets the HOST screen, not the login form",
+  condBody.includes('id="tabBoard"') && !condBody.includes("Password, please"));
 
 r = await call("/api/admin/logout", { method: "POST", cookie: session });
 ok("logout responds", r.status === 200);
