@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Marvel Wordle</title>
+<meta name="description" content="Twelve Marvel words, six guesses each, racing the clock.">
+<meta name="theme-color" content="#E9E9E6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101014" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=Chivo:ital,wght@0,400;0,700;0,900;1,400&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="inner">
+    <div class="wordmark"><span class="a">MARVEL</span><span class="b">Wordle</span></div>
+    <span class="pill" id="statusPill"><span class="dot"></span><span id="statusText">Connecting</span></span>
+    <span class="spacer"></span>
+  </div>
+</header>
+<main><section id="view"></section></main>
+<script src="/app.js"></script>
+</body>
+</html>

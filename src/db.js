@@ -1,0 +1,250 @@
+import fs from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { BUILTIN_PUZZLES, validatePuzzles } from "./words.js";
+
+export const DATA_DIR = process.env.DATA_DIR || "/data";
+const DB_PATH = path.join(DATA_DIR, "quiz.sqlite");
+const WORDS_PATH = path.join(DATA_DIR, "words.json");
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+export const db = new DatabaseSync(DB_PATH);
+db.exec("PRAGMA journal_mode = WAL");
+db.exec("PRAGMA foreign_keys = ON");
+db.exec("PRAGMA busy_timeout = 4000");
+
+/* node:sqlite has no transaction() wrapper, so this is the explicit form. */
+function tx(fn) {
+  db.exec("BEGIN");
+  try {
+    const out = fn();
+    db.exec("COMMIT");
+    return out;
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch (_) { /* already unwound */ }
+    throw e;
+  }
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS rounds (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at  INTEGER NOT NULL,
+    limit_ms    INTEGER NOT NULL,
+    puzzle_count INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS players (
+    id        TEXT PRIMARY KEY,
+    round_id  INTEGER NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+    name      TEXT NOT NULL,
+    joined_at INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    idx       INTEGER NOT NULL DEFAULT 0,
+    blocked   INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS players_round ON players(round_id);
+  CREATE TABLE IF NOT EXISTS progress (
+    player_id  TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    puzzle_idx INTEGER NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'open',
+    timed_out  INTEGER NOT NULL DEFAULT 0,
+    tries      INTEGER NOT NULL DEFAULT 0,
+    guesses    TEXT NOT NULL DEFAULT '[]',
+    started_at INTEGER,
+    ms         INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (player_id, puzzle_idx)
+  );
+  CREATE TABLE IF NOT EXISTS blocklist (
+    player_id TEXT PRIMARY KEY,
+    blocked_at INTEGER NOT NULL
+  );
+`);
+
+/* ---------- word list ---------- */
+
+let puzzleCache = null;
+
+export function loadPuzzles() {
+  if (puzzleCache) return puzzleCache;
+  try {
+    const raw = fs.readFileSync(WORDS_PATH, "utf8");
+    const [ok, result] = validatePuzzles(JSON.parse(raw));
+    if (ok) {
+      puzzleCache = result;
+      return puzzleCache;
+    }
+    console.warn(`[words] ${WORDS_PATH} rejected: ${result}. Falling back to the built-in list.`);
+  } catch (e) {
+    if (e.code !== "ENOENT") console.warn(`[words] could not read ${WORDS_PATH}: ${e.message}`);
+  }
+  puzzleCache = BUILTIN_PUZZLES;
+  return puzzleCache;
+}
+
+export function savePuzzles(list) {
+  fs.writeFileSync(WORDS_PATH, JSON.stringify(list, null, 2));
+  puzzleCache = list;
+}
+
+/* ---------- rounds ---------- */
+
+const DEFAULT_LIMIT_MS = Number(process.env.DEFAULT_LIMIT_MS || 90000);
+
+export function activeRound() {
+  const row = db.prepare("SELECT * FROM rounds ORDER BY id DESC LIMIT 1").get();
+  if (row) return row;
+  return newRound(DEFAULT_LIMIT_MS);
+}
+
+export function newRound(limitMs) {
+  const puzzles = loadPuzzles();
+  const info = db.prepare(
+    "INSERT INTO rounds (started_at, limit_ms, puzzle_count) VALUES (?, ?, ?)"
+  ).run(Date.now(), limitMs, puzzles.length);
+  return db.prepare("SELECT * FROM rounds WHERE id = ?").get(Number(info.lastInsertRowid));
+}
+
+export function setRoundLimit(roundId, limitMs) {
+  db.prepare("UPDATE rounds SET limit_ms = ? WHERE id = ?").run(limitMs, roundId);
+}
+
+/* ---------- players ---------- */
+
+export function getPlayer(id) {
+  if (!id) return null;
+  return db.prepare("SELECT * FROM players WHERE id = ?").get(id) ?? null;
+}
+
+export function upsertPlayer({ id, roundId, name }) {
+  const now = Date.now();
+  const existing = getPlayer(id);
+  if (existing) {
+    /* A reset moves everyone to the new round, keeping the name they chose. */
+    if (existing.round_id !== roundId) {
+      tx(() => {
+        db.prepare("DELETE FROM progress WHERE player_id = ?").run(id);
+        db.prepare("UPDATE players SET round_id = ?, idx = 0, name = ?, last_seen = ? WHERE id = ?")
+          .run(roundId, name || existing.name, now, id);
+      });
+    } else if (name && name !== existing.name) {
+      db.prepare("UPDATE players SET name = ?, last_seen = ? WHERE id = ?").run(name, now, id);
+    } else {
+      db.prepare("UPDATE players SET last_seen = ? WHERE id = ?").run(now, id);
+    }
+    return getPlayer(id);
+  }
+  db.prepare(
+    "INSERT INTO players (id, round_id, name, joined_at, last_seen, idx, blocked) VALUES (?, ?, ?, ?, ?, 0, ?)"
+  ).run(id, roundId, name, now, now, isBlocked(id) ? 1 : 0);
+  return getPlayer(id);
+}
+
+export function touchPlayer(id) {
+  db.prepare("UPDATE players SET last_seen = ? WHERE id = ?").run(Date.now(), id);
+}
+
+export function setPlayerIdx(id, idx) {
+  db.prepare("UPDATE players SET idx = ? WHERE id = ?").run(idx, id);
+}
+
+export function roundPlayers(roundId) {
+  return db.prepare("SELECT * FROM players WHERE round_id = ? AND blocked = 0").all(roundId);
+}
+
+/* ---------- blocklist ---------- */
+
+export function isBlocked(id) {
+  return !!db.prepare("SELECT 1 FROM blocklist WHERE player_id = ?").get(id);
+}
+
+export function blockPlayer(id) {
+  tx(() => {
+    db.prepare("INSERT OR REPLACE INTO blocklist (player_id, blocked_at) VALUES (?, ?)").run(id, Date.now());
+    db.prepare("UPDATE players SET blocked = 1 WHERE id = ?").run(id);
+  });
+}
+
+export function unblockPlayer(id) {
+  tx(() => {
+    db.prepare("DELETE FROM blocklist WHERE player_id = ?").run(id);
+    db.prepare("UPDATE players SET blocked = 0 WHERE id = ?").run(id);
+  });
+}
+
+export function blockedPlayers() {
+  return db.prepare(`
+    SELECT b.player_id AS id, b.blocked_at, p.name
+    FROM blocklist b LEFT JOIN players p ON p.id = b.player_id
+    ORDER BY b.blocked_at DESC
+  `).all();
+}
+
+/* ---------- progress ---------- */
+
+export function getRow(playerId, idx) {
+  return db.prepare("SELECT * FROM progress WHERE player_id = ? AND puzzle_idx = ?").get(playerId, idx) ?? null;
+}
+
+export function allRows(playerId) {
+  return db.prepare("SELECT * FROM progress WHERE player_id = ? ORDER BY puzzle_idx").all(playerId);
+}
+
+/** Serve a puzzle: creates the row and stamps the start time, once. */
+export function openRow(playerId, idx) {
+  const existing = getRow(playerId, idx);
+  if (existing) {
+    if (existing.status === "open" && !existing.started_at) {
+      db.prepare("UPDATE progress SET started_at = ? WHERE player_id = ? AND puzzle_idx = ?")
+        .run(Date.now(), playerId, idx);
+      return getRow(playerId, idx);
+    }
+    return existing;
+  }
+  db.prepare(
+    "INSERT INTO progress (player_id, puzzle_idx, status, started_at) VALUES (?, ?, 'open', ?)"
+  ).run(playerId, idx, Date.now());
+  return getRow(playerId, idx);
+}
+
+export function recordGuess(playerId, idx, { guesses, tries, status, ms, timedOut }) {
+  db.prepare(`
+    UPDATE progress
+       SET guesses = ?, tries = ?, status = ?, ms = ?, timed_out = ?
+     WHERE player_id = ? AND puzzle_idx = ?
+  `).run(JSON.stringify(guesses), tries, status, ms, timedOut ? 1 : 0, playerId, idx);
+  return getRow(playerId, idx);
+}
+
+/** Close an abandoned puzzle whose limit has passed. Returns true if it changed. */
+export function expireRow(playerId, idx, limitMs) {
+  const row = getRow(playerId, idx);
+  if (!row || row.status !== "open" || !row.started_at || !limitMs) return false;
+  if (Date.now() - row.started_at < limitMs) return false;
+  db.prepare(`
+    UPDATE progress SET status = 'lose', timed_out = 1, ms = ?
+     WHERE player_id = ? AND puzzle_idx = ?
+  `).run(limitMs, playerId, idx);
+  return true;
+}
+
+/** Sweep every open puzzle in the round whose time is up. Returns how many closed. */
+export function expireRound(roundId, limitMs) {
+  if (!limitMs) return 0;
+  const cutoff = Date.now() - limitMs;
+  const info = db.prepare(`
+    UPDATE progress SET status = 'lose', timed_out = 1, ms = ?
+     WHERE status = 'open'
+       AND started_at IS NOT NULL
+       AND started_at <= ?
+       AND player_id IN (SELECT id FROM players WHERE round_id = ?)
+  `).run(limitMs, cutoff, roundId);
+  return info.changes;
+}
+
+export function wipeRound(roundId) {
+  tx(() => {
+    db.prepare("DELETE FROM progress WHERE player_id IN (SELECT id FROM players WHERE round_id = ?)").run(roundId);
+    db.prepare("DELETE FROM players WHERE round_id = ?").run(roundId);
+  });
+}

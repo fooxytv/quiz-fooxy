@@ -1,0 +1,27 @@
+services:
+  quiz:
+    build: .
+    image: marvel-quiz:latest
+    container_name: marvel-quiz
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+    volumes:
+      - quiz-data:/data
+    # No ports published: the tunnel reaches it over the compose network.
+    expose:
+      - "3000"
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: marvel-quiz-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    depends_on:
+      quiz:
+        condition: service_healthy
+
+volumes:
+  quiz-data:
