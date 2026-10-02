@@ -150,6 +150,10 @@ for (const p of ["/admin.html", "/login.html"]) {
 const hdr = await fetch(B + "/admin", { redirect: "manual" });
 ok("the host page is not cacheable",
   /no-store/i.test(hdr.headers.get("cache-control") || ""), hdr.headers.get("cache-control"));
+const loginBody = await (await fetch(B + "/admin")).text();
+ok("the login page references versioned assets",
+  /href="\/styles\.css\?v=/.test(loginBody), (loginBody.match(/href="\/styles\.css[^"]*"/) || [])[0]);
+
 ok("the host page sends no cache validators",
   !hdr.headers.get("last-modified") && !hdr.headers.get("etag"),
   `last-modified=${hdr.headers.get("last-modified")} etag=${hdr.headers.get("etag")}`);

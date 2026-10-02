@@ -273,6 +273,22 @@ npm run dev              # http://localhost:3000 and /admin via the loopback byp
 reach the admin portal with no Access token. Never set it on the deployed
 container.
 
+## Deploying a change that actually reaches the browser
+
+Cloudflare puts a **four-hour browser cache TTL** on static assets by default. After
+a deploy, a returning browser keeps running the old `app.js` for hours without even
+asking — which looks exactly like the fix not working, and cost real time here.
+
+So the HTML is served uncached and every local script and stylesheet reference is
+rewritten to `?v=<build sha>`:
+
+```html
+<script src="/app.js?v=b22d4ff"></script>
+```
+
+The URL changes on every build, so the long cache becomes a benefit instead of a
+trap, and no hard refresh is needed after a deploy.
+
 ## Which build am I running?
 
 Every image is stamped with the commit it was built from, so "did my change

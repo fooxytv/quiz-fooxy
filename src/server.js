@@ -1,6 +1,7 @@
 import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { WebSocketServer } from "ws";
@@ -34,6 +35,10 @@ const app = express();
 app.set("trust proxy", true);
 app.use(express.json({ limit: "64kb" }));
 app.disable("x-powered-by");
+/* No ETag on generated responses: the login form and the host screen share one
+   URL, and an ETag there is another route to a 304 that re-renders the wrong page.
+   express.static keeps its own validators, which is what versioned assets want. */
+app.disable("etag");
 
 /* ----------------------------------------------------------------- theme ---- */
 
@@ -614,6 +619,33 @@ app.get("/api/admin/qr.svg", requireAdmin, async (req, res) => {
 
 const ADMIN_PAGE = path.join(__dirname, "../public/admin.html");
 const LOGIN_PAGE = path.join(__dirname, "../public/login.html");
+const INDEX_PAGE = path.join(__dirname, "../public/index.html");
+
+/*
+ * Cloudflare puts a four-hour BROWSER cache TTL on static assets by default, so
+ * after a deploy a returning browser keeps running the old app.js for hours
+ * without so much as asking -- which is indistinguishable from a fix not working.
+ *
+ * So every local script and stylesheet reference gets ?v=<build>, and the HTML
+ * itself is sent uncached. The asset URL changes on every build, which means the
+ * long cache is now a benefit rather than a trap.
+ */
+const pageCache = new Map();
+function page(file) {
+  let html = pageCache.get(file);
+  if (!html) {
+    html = fs.readFileSync(file, "utf8").replace(
+      /(\s(?:src|href)=")(\/[^"?]+\.(?:js|css))(")/g,
+      (_, a, url, b) => `${a}${url}?v=${encodeURIComponent(BUILD.sha)}${b}`
+    );
+    pageCache.set(file, html);
+  }
+  return html;
+}
+
+function sendPage(res, file, store) {
+  res.set("Cache-Control", store).type("html").send(page(file));
+}
 
 app.post("/api/admin/login", (req, res) => {
   const wait = lockedFor(req);
@@ -687,14 +719,17 @@ app.get("/admin", async (req, res) => {
    * the host screen. That is why logging in appeared to do nothing until a manual
    * refresh: a hard reload skips the conditional request.
    */
-  const noCache = { cacheControl: false, lastModified: false, etag: false };
   const who = await verifyAdmin(req);
-  if (who) return res.sendFile(ADMIN_PAGE, noCache);
-  if (passwordConfigured) return res.sendFile(LOGIN_PAGE, noCache);
+  if (who) return sendPage(res, ADMIN_PAGE, "no-store, must-revalidate");
+  if (passwordConfigured) return sendPage(res, LOGIN_PAGE, "no-store, must-revalidate");
   res.status(403).type("text/plain").send(sealedMessage());
 });
 
-app.use(express.static(path.join(__dirname, "../public"), { index: "index.html" }));
+/* The player page goes through the same rewrite, and must not be cached either,
+   or a browser would never learn the new asset URLs. */
+app.get(["/", "/index.html"], (req, res) => sendPage(res, INDEX_PAGE, "no-cache, must-revalidate"));
+
+app.use(express.static(path.join(__dirname, "../public"), { index: false }));
 
 /* ------------------------------------------------------------ websockets ---- */
 

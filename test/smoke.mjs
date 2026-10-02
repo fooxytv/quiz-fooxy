@@ -347,6 +347,16 @@ check("the board reports the skip allowance and letter cost",
  * dead code this way. These assertions read the file the browser is served and
  * check each feature is referenced, not merely defined.
  */
+/* Cloudflare puts a 4-hour browser cache on assets, so a deploy must change the
+   URL or a returning browser keeps the old app.js for hours. */
+const indexHtml = await (await fetch(BASE + "/")).text();
+check("the player page versions its asset URLs",
+  /src="\/app\.js\?v=/.test(indexHtml), (indexHtml.match(/src="\/app\.js[^"]*"/) || [])[0]);
+const indexHead = await fetch(BASE + "/");
+check("the player page itself is not browser-cached",
+  /no-cache|no-store/i.test(indexHead.headers.get("cache-control") || ""),
+  indexHead.headers.get("cache-control"));
+
 const appJs = await (await fetch(BASE + "/app.js")).text();
 for (const [what, needle] of [
   ["the lifelines are rendered", "keyboard() + lifelines()"],
