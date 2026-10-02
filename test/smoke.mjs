@@ -275,6 +275,14 @@ r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
 await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
 
 let st = (await call("/api/state")).data;
+/* canReveal lives at the TOP LEVEL of the payload. The client once read it as
+   state.current.canReveal, which is always undefined, so Buy a letter was
+   permanently greyed out. Assert both halves of that contract. */
+check("canReveal is a top-level boolean on the payload",
+  typeof st.canReveal === "boolean", `canReveal=${st.canReveal} (current.canReveal=${st.current?.canReveal})`);
+check("an open word can have a letter bought", st.canReveal === true,
+  `status=${st.current?.status} len=${st.current?.length}`);
+
 check("a word is in hand to buy letters on",
   !!st.current && st.current.status === "open" && !!st.current.startedAt,
   `status=${st.current && st.current.status}`);
@@ -343,6 +351,7 @@ const appJs = await (await fetch(BASE + "/app.js")).text();
 for (const [what, needle] of [
   ["the lifelines are rendered", "keyboard() + lifelines()"],
   ["the buy-a-letter button is wired", 'id="revealBtn"'],
+  ["buy-a-letter reads canReveal from the right place", "state.canReveal ?"],
   ["the skip button is wired", 'id="skipBtn"'],
   ["the bought-letters strip is rendered", 'class="known"'],
   ["auto-advance is scheduled", "autoNextTimer = setTimeout(goNext"],

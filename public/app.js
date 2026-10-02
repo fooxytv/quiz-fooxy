@@ -375,7 +375,7 @@
     const left = state.skipsLeft ?? 0;
     const allowed = state.skipsAllowed ?? 0;
     return `<div class="lifelines">
-      <button class="btn ghost sm" id="revealBtn" type="button" ${c.canReveal ? "" : "disabled"}>
+      <button class="btn ghost sm" id="revealBtn" type="button" ${state.canReveal ? "" : "disabled"}>
         Buy a letter <span class="cost">&minus;${cost}s</span>
       </button>
       ${allowed > 0 ? `<button class="btn ghost sm" id="skipBtn" type="button" ${left > 0 ? "" : "disabled"}>
