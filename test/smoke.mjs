@@ -356,6 +356,9 @@ for (const [what, needle] of [
   ["audio unlocks on any gesture", 'addEventListener("pointerdown", go, true)'],
   ["an on-but-locked button unlocks instead of muting", "ctx.state !== \"running\""],
   ["the label admits when it is locked", "Sound on - tap"],
+  ["the bed is mixed loud enough to hear", "pad(chord.root / 2, at, bar, 0.26)"],
+  ["the bus has a compressor for headroom", "createDynamicsCompressor"],
+  ["there is an on-demand sound test", "function demo()"],
 ]) {
   check(what, soundJs.includes(needle), needle);
 }
@@ -366,6 +369,8 @@ for (const [what, needle] of [
   ["focus hides the controls", "hideinfocus"],
   ["the skip allowance control is wired", "data-skips"],
   ["the board shows skips and letters bought", "p.reveals"],
+  ["the host can test sound on demand", 'id="testSound"'],
+  ["the host is told the audio state", 'id="soundState"'],
 ]) {
   check(what, adminJs.includes(needle), needle);
 }

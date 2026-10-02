@@ -127,10 +127,13 @@
           ${board.countdownChoices.map((ms) => `<button data-cd="${ms}" aria-pressed="${ms === board.countdownMs}" type="button">${countdownLabel(ms)}</button>`).join("")}
         </div>
         <button class="btn" id="goBtn" type="button" ${n ? "" : "disabled"}>${n ? "Start the quiz" : "Waiting for players"}</button>
-        ${window.Theme?.hasIntro?.() ? `<div class="introctl">
-          <button class="btn ghost sm" id="introPlay" type="button">Play title card</button>
-          <button class="soundbtn" id="introLoop" type="button" aria-pressed="${!!window.Theme?.introLooping?.()}">Loop it</button>
-        </div>` : ""}
+        <div class="introctl">
+          ${window.Theme?.hasIntro?.() ? `
+            <button class="btn ghost sm" id="introPlay" type="button">Play title card</button>
+            <button class="soundbtn" id="introLoop" type="button" aria-pressed="${!!window.Theme?.introLooping?.()}">Loop it</button>` : ""}
+          <button class="btn ghost sm" id="testSound" type="button">Test sound</button>
+          <span class="meta" id="soundState"></span>
+        </div>
       </div>`;
     }
 
@@ -262,6 +265,32 @@
         } catch (e) { hostMsg(e.message, "err"); }
       };
     });
+
+    const ts = root.querySelector("#testSound");
+    const ss = root.querySelector("#soundState");
+    const sayState = () => {
+      if (!ss) return;
+      const on = window.Sfx?.isOn?.();
+      const st = window.Sfx?.state?.() || "none";
+      ss.textContent = !on
+        ? "Sound is off - turn it on in the header"
+        : st === "running"
+          ? "Audio running"
+          : `Audio ${st} - click anywhere to unlock`;
+      ss.style.color = on && st === "running" ? "var(--green)" : "var(--gold)";
+    };
+    sayState();
+    if (ts) ts.onclick = () => {
+      if (!window.Sfx?.isOn?.()) {
+        hostMsg("Turn Sound on in the header first, then press this.", "err");
+        sayState();
+        return;
+      }
+      const played = window.Sfx.demo();
+      sayState();
+      hostMsg(played ? "Playing two bars. If you hear nothing, check the system volume and output device."
+                     : "Audio is still locked - click anywhere on the page, then press again.", played ? "ok" : "err");
+    };
 
     const ip = root.querySelector("#introPlay");
     if (ip) ip.onclick = () => window.Theme?.playIntro?.();

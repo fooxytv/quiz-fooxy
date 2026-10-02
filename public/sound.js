@@ -12,6 +12,7 @@
   "use strict";
 
   const LS_KEY = "marvelQuiz.sound";
+  const BUS = 0.55;
   const BPM = 84;
   const BEAT = 60 / BPM;
 
@@ -83,8 +84,25 @@
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.45;
-    master.connect(ctx.destination);
+    master.gain.value = BUS;
+    /*
+     * The bed used to sit around -32 dBFS -- arithmetically present, practically
+     * inaudible on laptop speakers, which is why "no music" was a real report
+     * rather than a stale build. Levels below are now mixed for a meeting room,
+     * with a compressor to keep the summed voices off the ceiling.
+     */
+    try {
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -12;
+      comp.knee.value = 12;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.005;
+      comp.release.value = 0.25;
+      master.connect(comp);
+      comp.connect(ctx.destination);
+    } catch (e) {
+      master.connect(ctx.destination);
+    }
     return ctx;
   }
 
@@ -101,7 +119,7 @@
   /* ------------------------------------------------------------- voices --- */
 
   /** A brass-ish tone: two detuned saws through a swept lowpass. */
-  function brass(freq, at, dur, level = 0.18) {
+  function brass(freq, at, dur, level = 0.3) {
     const g = ctx.createGain();
     const f = ctx.createBiquadFilter();
     f.type = "lowpass";
@@ -127,7 +145,7 @@
   }
 
   /** A soft sustained pad for the chord bed. */
-  function pad(freq, at, dur, level = 0.05) {
+  function pad(freq, at, dur, level = 0.22) {
     const g = ctx.createGain();
     const f = ctx.createBiquadFilter();
     f.type = "lowpass";
@@ -145,7 +163,7 @@
   }
 
   /** Timpani: a pitched thud with a noise transient. */
-  function drum(at, freq = 68, level = 0.3) {
+  function drum(at, freq = 68, level = 0.34) {
     const g = ctx.createGain();
     g.gain.setValueAtTime(level, at);
     g.gain.exponentialRampToValueAtTime(0.0001, at + 0.42);
@@ -170,7 +188,7 @@
     n.stop(at + 0.12);
   }
 
-  function blip(freq, at, dur = 0.1, level = 0.2, type = "square") {
+  function blip(freq, at, dur = 0.1, level = 0.26, type = "square") {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, at);
     g.gain.linearRampToValueAtTime(level, at + 0.012);
@@ -190,18 +208,18 @@
     const chord = PROG[barIndex % PROG.length];
     const bar = BEAT * 4;
 
-    pad(chord.root / 2, at, bar, 0.055);
-    pad(chord.third, at, bar, 0.03);
-    pad(chord.fifth, at, bar, 0.03);
+    pad(chord.root / 2, at, bar, 0.26);
+    pad(chord.third, at, bar, 0.15);
+    pad(chord.fifth, at, bar, 0.15);
 
-    drum(at, 66, 0.26);
-    drum(at + BEAT * 2.5, 60, 0.15);
+    drum(at, 66, 0.34);
+    drum(at + BEAT * 2.5, 60, 0.2);
 
     /* The motif enters only on the back half of the loop, so it does not nag. */
     const phrase = barIndex % PROG.length === 2 ? MOTIF_A : barIndex % PROG.length === 3 ? MOTIF_B : null;
     if (phrase) {
       for (const [deg, beat] of phrase) {
-        brass(semi(chord.root * 2, deg), at + beat * BEAT, BEAT * 0.62, 0.075);
+        brass(semi(chord.root * 2, deg), at + beat * BEAT, BEAT * 0.62, 0.3);
       }
     }
   }
@@ -247,7 +265,7 @@
     const t = at0();
     if (t === null) return;
     const map = { 3: 523.25, 2: 587.33, 1: 659.25 };
-    blip(map[n] || 523.25, t, 0.12, 0.22, "square");
+    blip(map[n] || 523.25, t, 0.14, 0.34, "square");
   }
 
   /** The go: a short rising brass hit over a drum. */
@@ -256,9 +274,9 @@
     if (t === null) return;
     lobbyStop();
     drum(t, 72, 0.34);
-    brass(A2 * 2, t, 0.3, 0.16);
-    brass(A2 * 3, t + 0.1, 0.34, 0.14);
-    brass(A2 * 4, t + 0.2, 0.5, 0.13);
+    brass(A2 * 2, t, 0.3, 0.34);
+    brass(A2 * 3, t + 0.1, 0.34, 0.3);
+    brass(A2 * 4, t + 0.2, 0.5, 0.28);
   }
 
   /** Solved: an ascending figure, brighter the fewer guesses it took. */
@@ -266,7 +284,7 @@
     const t = at0();
     if (t === null) return;
     const notes = tries <= 2 ? [0, 4, 7, 12] : tries <= 4 ? [0, 4, 7] : [0, 3, 7];
-    notes.forEach((n, i) => blip(semi(440, n), t + i * 0.08, 0.16, 0.17, "triangle"));
+    notes.forEach((n, i) => blip(semi(440, n), t + i * 0.08, 0.18, 0.32, "triangle"));
     drum(t, 80, 0.14);
   }
 
@@ -274,18 +292,28 @@
   function fail() {
     const t = at0();
     if (t === null) return;
-    blip(196, t, 0.22, 0.16, "sawtooth");
-    blip(146.83, t + 0.14, 0.34, 0.14, "sawtooth");
+    blip(196, t, 0.24, 0.3, "sawtooth");
+    blip(146.83, t + 0.14, 0.36, 0.27, "sawtooth");
   }
 
   /** A quiet click when a letter lands. */
   function key() {
     const t = at0();
     if (t === null) return;
-    blip(1200, t, 0.03, 0.045, "square");
+    blip(1200, t, 0.035, 0.1, "square");
   }
 
   /* --------------------------------------------------------------- toggle --- */
+
+  /** Play a few bars on demand, so the host can confirm sound without a lobby. */
+  function demo() {
+    if (!enabled || !ensure()) return false;
+    if (ctx.state !== "running") { ctx.resume().catch(() => {}); return false; }
+    const at = ctx.currentTime + 0.05;
+    const bar = BEAT * 4;
+    for (let i = 0; i < 2; i++) scheduleBar(i + 2, at + i * bar);
+    return true;
+  }
 
   function isOn() { return enabled; }
 
@@ -298,7 +326,7 @@
     } else {
       if (ensure()) {
         if (ctx.state === "suspended") ctx.resume();
-        master.gain.value = 0.45;
+        master.gain.value = BUS;
       }
     }
     return enabled;
@@ -308,7 +336,7 @@
   function confirmOn() {
     const t = at0();
     if (t === null) return;
-    [0, 5, 12].forEach((n, i) => blip(semi(523.25, n), t + i * 0.07, 0.14, 0.2, "triangle"));
+    [0, 5, 12].forEach((n, i) => blip(semi(523.25, n), t + i * 0.07, 0.16, 0.34, "triangle"));
   }
 
   /**
@@ -350,5 +378,5 @@
     arm(wantsLobby);
   }
 
-  window.Sfx = { isOn, running, arm, setOn, button, confirmOn, lobbyStart, lobbyStop, tick, go, solve, fail, key };
+  window.Sfx = { isOn, running, arm, setOn, button, confirmOn, demo, state: () => (ctx ? ctx.state : "none"), lobbyStart, lobbyStop, tick, go, solve, fail, key };
 })();

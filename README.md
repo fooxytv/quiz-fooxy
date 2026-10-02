@@ -150,11 +150,23 @@ nothing is sampled, traced or transcribed from anyone's property.
 switching it on plays a short rising chime so you know it took. The choice is
 remembered per device.
 
-Browsers create an audio context suspended and refuse to resume one without a
-user gesture, so a page loading with the preference already on would sit silent
-while the button claimed otherwise. Any click or key press unlocks it, a button
-that is on-but-locked unlocks rather than muting, and until then the label reads
-**Sound on - tap** and pulses. The full lobby bed plays only on the **host** screen, which is the one
+Two separate faults made "no music" a real report rather than a misunderstanding.
+
+**It was mixed far too quietly.** The chord bed sat at about −32 dBFS — present in
+the arithmetic, inaudible on laptop speakers. Only the drum and the confirmation
+chime were ever loud enough to notice. Levels are now mixed for a room (bed around
+−17 dBFS) with a compressor on the bus for headroom, since the louder voices sum
+to about 0.66 at peak.
+
+**And the context could never unlock.** Browsers create an audio context suspended
+and refuse to resume one without a user gesture, so a page loading with the
+preference already on would sit silent while the button claimed otherwise. Any
+click or key press now unlocks it, a button that is on-but-locked unlocks rather
+than muting, and until then the label reads **Sound on - tap** and pulses.
+
+The host screen has a **Test sound** button that plays two bars on demand without
+needing to be in a lobby, beside a readout of the actual audio state — running,
+suspended, or off — so a silent room is diagnosable rather than mysterious. The full lobby bed plays only on the **host** screen, which is the one
 wired to the room's speakers; players' phones get the short effects only, because
 a dozen handsets playing the same loop a few milliseconds apart sounds like a
 fault. There is a Sound button in the header of both pages.
@@ -413,7 +425,7 @@ throws, which is how residue got left the first time.
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-A hundred and twenty-nine checks against a live server (`test/smoke.mjs`), driving two players at
+A hundred and thirty-four checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the
