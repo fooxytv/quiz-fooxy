@@ -233,8 +233,7 @@ cp .env.example .env     # then fill in the four required values
 |---|---|
 | `TUNNEL_TOKEN` | **Hard stop if missing.** Without it nothing can reach the quiz. |
 | `PUBLIC_URL` | The hostname you mapped, exactly as a phone should open it — this is what the QR encodes. |
-| `CF_ACCESS_TEAM_DOMAIN` | Warns and pauses if missing: players can play but **you** get 403 on `/admin`. |
-| `CF_ACCESS_AUD` | Same. |
+| `ADMIN_PASSWORD` | **Hard stop if missing** (unless Cloudflare Access is configured). Without it you cannot open the host screen. `openssl rand -base64 24` |
 
 It then validates the compose file, builds with `--pull`, waits for the container
 to report healthy, **checks the tunnel container is running and has registered a
@@ -306,22 +305,63 @@ it found, rather than an `ERR_UNKNOWN_BUILTIN_MODULE` stack.
 
 ## Cloudflare setup
 
-**1. Tunnel.** In Zero Trust → Networks → Tunnels, create a tunnel, copy its
-token into `TUNNEL_TOKEN` in `.env`, and add a public hostname:
+**1. Tunnel.** In Zero Trust → Networks → Tunnels, create a tunnel and copy its
+token into `TUNNEL_TOKEN`.
+
+A connector showing "healthy" is only half the job — it says cloudflared is
+talking to Cloudflare, not that anything knows where to send requests. On the
+tunnel's **Public Hostname** tab, add one:
 
 | | |
 |---|---|
 | Subdomain | `quiz` |
 | Domain | `fooxy.tv` |
-| Service | `http://quiz:3000` |
+| Path | leave blank |
+| Type | `HTTP` |
+| URL | **`quiz:3000`** |
 
-`quiz` is the compose service name, so the tunnel reaches it over the compose
-network. The app publishes no ports to the host, so the tunnel is the only route
-in. The token is passed to `cloudflared` through the environment rather than the
-command line, so it is not visible to anyone who can run `docker ps`.
+`quiz:3000`, not `localhost:3000`. `cloudflared` runs in its own container, so
+`localhost` there is the connector itself; `quiz` is the compose service name,
+which Docker resolves over the shared network, and 3000 is the container's own
+port. The app publishes nothing to the host, so the tunnel is the only way in.
+Cloudflare creates the DNS record for you when you add the hostname.
 
-**2. Access policy on the admin portal.** In Zero Trust → Access →
-Applications, add a self-hosted application:
+**2. Host password.** Set `ADMIN_PASSWORD` in `.env`. That is all the host screen
+needs — see below.
+
+## The host screen is password-protected
+
+The quiz is open to anyone with the link. `/admin` is not: it serves a login form,
+and the password is exchanged once for a signed, httpOnly session cookie lasting
+`ADMIN_SESSION_DAYS` (14 by default).
+
+On a public hostname that password is the only thing in front of the host screen,
+so it is built accordingly:
+
+- the comparison is constant-time over hashes, so it leaks nothing by timing;
+- the cookie carries an HMAC over the expiry, signed with a random secret
+  persisted server-side — it contains no part of the password, and tampering or
+  forging it is refused;
+- changing `ADMIN_PASSWORD` invalidates every existing session, because the
+  signature is bound to it;
+- five wrong guesses from one address triggers a lockout that doubles each further
+  attempt up to an hour, and the lockout applies to the correct password too;
+- with nothing configured the screen is **sealed**, not open — players can still
+  play, and the startup log says so in a banner.
+
+There is a **Sign out** button on the host screen for a shared machine.
+
+`npm run test:auth` boots a throwaway server with a known password and checks all
+of the above, including that the websocket refuses an unauthenticated upgrade and
+that the player pages stay open.
+
+Cloudflare Access is still supported as an alternative if you run Zero Trust, but
+it is not needed and not on every plan.
+
+## Cloudflare setup (Zero Trust alternative)
+
+Only if you would rather use Zero Trust than a password. Add a self-hosted
+application in Zero Trust → Access → Applications:
 
 - Paths: `quiz.fooxy.tv/admin` and `quiz.fooxy.tv/api/admin`
 - Policy: Allow, with an Emails rule naming your own address
@@ -427,7 +467,8 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 ## Tests
 
 ```bash
-./scripts/local.sh && ./scripts/local.sh test
+./scripts/local.sh && ./scripts/local.sh test   # the game, in Docker
+npm run test:auth                               # the host login, on its own server
 ```
 
 It also fetches `app.js`, `admin.js` and `sound.js` and asserts each feature is

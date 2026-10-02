@@ -8,7 +8,12 @@ import QRCode from "qrcode";
 
 import { MAX_TRIES, clientMeta, validatePuzzles, buildSequence, expectedOverlap, TIER_ORDER, COUNT_CHOICES, DEMO } from "./words.js";
 import { mark, resultCode, rowMs, compareEntries } from "./game.js";
-import { requireAdmin, verifyAdmin, parseCookies, accessConfigured, insecureLocal, devBypass } from "./auth.js";
+import {
+  requireAdmin, verifyAdmin, parseCookies, authMode, sealedMessage,
+  passwordConfigured, accessConfigured, insecureLocal,
+  passwordMatches, mintSession, ADMIN_COOKIE, sessionMs,
+  lockedFor, noteFailure, noteSuccess,
+} from "./auth.js";
 import * as store from "./db.js";
 import { loadThemes, findTheme, reloadThemes } from "./themes.js";
 
@@ -605,6 +610,49 @@ app.get("/api/admin/qr.svg", requireAdmin, async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------ host login ---- */
+
+const ADMIN_PAGE = path.join(__dirname, "../public/admin.html");
+const LOGIN_PAGE = path.join(__dirname, "../public/login.html");
+
+app.post("/api/admin/login", (req, res) => {
+  const wait = lockedFor(req);
+  if (wait > 0) {
+    return res.status(429).json({
+      error: "locked",
+      message: `Too many attempts. Try again in ${Math.ceil(wait / 1000)}s.`,
+      retryAfterMs: wait,
+    });
+  }
+  if (!passwordConfigured) {
+    return res.status(403).json({ error: "no_password", message: sealedMessage() });
+  }
+  if (!passwordMatches(req.body?.password)) {
+    const rec = noteFailure(req);
+    const left = Math.max(0, 5 - rec.fails);
+    return res.status(401).json({
+      error: "bad_password",
+      message: left > 0
+        ? `Wrong password. ${left} ${left === 1 ? "try" : "tries"} before a timeout.`
+        : "Wrong password. Locked out for a while now.",
+    });
+  }
+  noteSuccess(req);
+  res.cookie(ADMIN_COOKIE, mintSession(), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: COOKIE_SECURE,
+    maxAge: sessionMs,
+    path: "/",
+  });
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/logout", (req, res) => {
+  res.clearCookie(ADMIN_COOKIE, { path: "/" });
+  res.json({ ok: true });
+});
+
 /* ---------------------------------------------------------------- pages ----- */
 
 /* Files the operator dropped in DATA_DIR/assets. Name only: no path traversal. */
@@ -619,7 +667,13 @@ app.get("/assets/:file", (req, res) => {
 app.get("/healthz", (req, res) =>
   res.json({ ok: true, round: store.activeRound().id, build: BUILD }));
 
-app.get("/admin", requireAdmin, (req, res) => res.sendFile(path.join(__dirname, "../public/admin.html")));
+/* Unauthenticated hosts get the login form, not a JSON refusal they cannot act on. */
+app.get("/admin", async (req, res) => {
+  const who = await verifyAdmin(req);
+  if (who) return res.sendFile(ADMIN_PAGE);
+  if (passwordConfigured) return res.sendFile(LOGIN_PAGE);
+  res.status(403).type("text/plain").send(sealedMessage());
+});
 
 app.use(express.static(path.join(__dirname, "../public"), { index: "index.html" }));
 
@@ -737,20 +791,22 @@ setInterval(() => {
 }, 5000).unref();
 
 server.listen(PORT, () => {
-  const authMode = accessConfigured
-    ? "Cloudflare Access"
-    : insecureLocal
-      ? "OPEN TO THE LOCAL NETWORK"
-      : devBypass
-        ? "DEV BYPASS (loopback only)"
-        : "SEALED - set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD";
   console.log(`marvel-quiz listening on :${PORT}`);
   console.log(`  build        ${BUILD.sha}  ${BUILD.at}`);
   console.log(`  public url   ${PUBLIC_URL}`);
   console.log(`  data dir     ${store.DATA_DIR}`);
   console.log(`  pool         ${store.loadPuzzles().length} words`);
   console.log(`  theme        ${activeTheme().id}  (${loadThemes(store.DATA_DIR).length} available)`);
-  console.log(`  admin auth   ${authMode}`);
+  console.log(`  admin auth   ${authMode()}`);
+  if (!passwordConfigured && !accessConfigured && !insecureLocal) {
+    console.log("");
+    console.log("  ****************************************************************");
+    console.log("  *  No ADMIN_PASSWORD set, so the host screen is SEALED.         *");
+    console.log("  *  Players can play; you cannot open the leaderboard.           *");
+    console.log("  *  Set ADMIN_PASSWORD in .env and restart.                      *");
+    console.log("  ****************************************************************");
+    console.log("");
+  }
   if (insecureLocal) {
     console.log("");
     console.log("  ****************************************************************");

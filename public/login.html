@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Marvel Quiz — Host</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=Chivo:wght@400;700;900&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .loginwrap{max-width:420px;margin:0 auto;padding:40px 16px}
+  .loginwrap h1{font-size:34px;line-height:.95;margin-bottom:6px}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="inner">
+    <div class="wordmark"><span class="a">MARVEL</span><span class="b">Quiz</span></div>
+    <span class="hostbadge">Host</span>
+  </div>
+</header>
+<main>
+  <div class="loginwrap">
+    <div class="panel panel-pad halftone">
+      <div class="cat">Host screen</div>
+      <h1>Password, please</h1>
+      <p class="meta" style="margin:0 0 16px">The quiz itself is open to anyone with the link. This screen is not.</p>
+      <form id="f" autocomplete="on">
+        <label class="fieldlabel" for="pw">Admin password</label>
+        <input type="password" id="pw" name="password" autocomplete="current-password" required>
+        <div class="row">
+          <button class="btn" type="submit" id="go">Open the host screen</button>
+        </div>
+      </form>
+      <p class="toast" id="msg" style="text-align:left"></p>
+    </div>
+  </div>
+</main>
+<script>
+(() => {
+  "use strict";
+  const f = document.getElementById("f");
+  const pw = document.getElementById("pw");
+  const go = document.getElementById("go");
+  const msg = document.getElementById("msg");
+  pw.focus();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    go.disabled = true;
+    msg.textContent = "";
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw.value }),
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) { location.replace("/admin"); return; }
+      msg.textContent = (data && data.message) || "That did not work.";
+      pw.select();
+    } catch (err) {
+      msg.textContent = "Could not reach the server.";
+    } finally {
+      go.disabled = false;
+    }
+  };
+})();
+</script>
+</body>
+</html>

@@ -19,17 +19,24 @@ if ! grep -qE '^TUNNEL_TOKEN=.+' .env; then
   exit 1
 fi
 
-# Warn about placeholders rather than deploying a half-configured admin portal.
-missing=()
-grep -q '^CF_ACCESS_AUD=.\+'                  .env || missing+=("CF_ACCESS_AUD")
-grep -q '^CF_ACCESS_TEAM_DOMAIN=.\+'          .env || missing+=("CF_ACCESS_TEAM_DOMAIN")
-grep -qE '^CF_ACCESS_TEAM_DOMAIN=yourteam\.'  .env && missing+=("CF_ACCESS_TEAM_DOMAIN (still the placeholder)")
-if (( ${#missing[@]} )); then
-  echo "!! Cloudflare Access is not configured:" >&2
-  printf '     - %s\n' "${missing[@]}" >&2
-  echo "   Players can still play, but YOU will get 403 on /admin and will not be" >&2
-  echo "   able to open the leaderboard or start a round." >&2
-  echo "   Continuing in 8s; Ctrl-C to stop and finish the Access setup first." >&2
+# The host screen needs SOMETHING in front of it, or you cannot run a quiz.
+pw="$(grep -E '^ADMIN_PASSWORD=' .env | cut -d= -f2- || true)"
+access_ok=no
+grep -qE '^CF_ACCESS_AUD=.+' .env && grep -qE '^CF_ACCESS_TEAM_DOMAIN=.+' .env && access_ok=yes
+
+if [[ -z "$pw" && "$access_ok" == "no" ]]; then
+  echo "!! No ADMIN_PASSWORD in .env, and Cloudflare Access is not configured." >&2
+  echo "   The host screen would be sealed: players could play, but you could not" >&2
+  echo "   open the leaderboard or start a round." >&2
+  echo >&2
+  echo "   Set one in .env:   ADMIN_PASSWORD=\$(openssl rand -base64 24)" >&2
+  exit 1
+fi
+
+if [[ -n "$pw" && ${#pw} -lt 12 ]]; then
+  echo "!! ADMIN_PASSWORD is only ${#pw} characters, on a publicly reachable" >&2
+  echo "   hostname. Use something longer:  openssl rand -base64 24" >&2
+  echo "   Continuing in 8s; Ctrl-C to change it." >&2
   sleep 8
 fi
 

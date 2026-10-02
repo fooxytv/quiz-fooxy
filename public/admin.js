@@ -209,6 +209,7 @@
   function hostbarMarkup() {
     return `<div class="hostbar">
       <button class="btn ghost sm" id="resetBtn" type="button">Reset and kick everyone</button>
+      <button class="btn ghost sm" id="signOut" type="button">Sign out</button>
       <span class="meta">Clears the board, the removed list and everyone's session &mdash; they each have to join again from scratch. Tap twice to confirm.</span>
       <p class="meta" id="hostMsg"></p>
     </div>`;
@@ -316,6 +317,12 @@
         catch (e) { hostMsg(e.message, "err"); }
       };
     });
+
+    const so = root.querySelector("#signOut");
+    if (so) so.onclick = async () => {
+      try { await api("/api/admin/logout", { method: "POST" }); } catch (e) { /* going anyway */ }
+      location.replace("/admin");
+    };
 
     const rb = root.querySelector("#resetBtn");
     if (rb) wireDanger(rb, "Tap again to wipe the board", async () => {
