@@ -19,7 +19,7 @@ docker cp backdrop.jpg  marvel-quiz:/data/assets/backdrop.jpg
 | `id` | lowercase slug, unique. Reusing a built-in id replaces it. |
 | `name` | what the Themes tab shows |
 | `blurb` | one line of description |
-| `scene` | `comic` or `cosmic` — which background animation to run |
+| `scene` | `hud`, `cosmic` or `comic` — which background animation to run |
 | `wordmark.lead` / `.tail` | the two halves of the name in the header |
 | `intro` | optional title card: `title`, `subtitle`, `everyMs` (6000–120000) |
 | `palette` | hex colours for any of the themeable tokens below |
@@ -35,7 +35,7 @@ so a theme can never inject CSS.
 
 ## A note on artwork
 
-The two built-in scenes are drawn in code, so nothing ships with a frame, still
+The three built-in scenes are drawn in code, so nothing ships with a frame, still
 or logo from anyone's film. `backdropImage` loads whatever you put in `assets/`;
 what you are entitled to use there is your call.
 

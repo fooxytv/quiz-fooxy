@@ -349,27 +349,37 @@ body.art-on #backdrop{opacity:1}
 #backdrop.has-image{background-size:cover;background-position:center}
 
 /* The cosmic theme sits content on glass so the scene reads through it. */
-:root[data-scene="cosmic"] .panel,
-:root[data-scene="cosmic"] .qrcard,
-:root[data-scene="cosmic"] .howto,
-:root[data-scene="cosmic"] .gostrip,
-:root[data-scene="cosmic"] .settings,
-:root[data-scene="cosmic"] .table-scroll,
-:root[data-scene="cosmic"] .pod{
+:is(:root[data-scene="cosmic"],:root[data-scene="hud"]) :is(
+  .panel, .qrcard, .howto, .gostrip, .settings, .table-scroll, .pod){
   background:color-mix(in srgb,var(--surface) 82%,transparent);
   backdrop-filter:blur(9px);
   -webkit-backdrop-filter:blur(9px);
 }
-:root[data-scene="cosmic"] .topbar{
+:is(:root[data-scene="cosmic"],:root[data-scene="hud"]) .topbar{
   background:color-mix(in srgb,var(--paper) 72%,transparent);
   backdrop-filter:blur(11px);
   -webkit-backdrop-filter:blur(11px);
   background-image:none;
 }
-:root[data-scene="cosmic"] .halftone{background-image:none}
-:root[data-scene="cosmic"] .tile{background:color-mix(in srgb,var(--surface) 70%,transparent)}
-:root[data-scene="cosmic"] .key{background:color-mix(in srgb,var(--surface) 76%,transparent)}
-:root[data-scene="cosmic"] .wordmark .a{text-shadow:0 0 18px color-mix(in srgb,var(--red) 70%,transparent)}
+:is(:root[data-scene="cosmic"],:root[data-scene="hud"]) .halftone{background-image:none}
+:is(:root[data-scene="cosmic"],:root[data-scene="hud"]) .tile{background:color-mix(in srgb,var(--surface) 70%,transparent)}
+:is(:root[data-scene="cosmic"],:root[data-scene="hud"]) .key{background:color-mix(in srgb,var(--surface) 76%,transparent)}
+:is(:root[data-scene="cosmic"],:root[data-scene="hud"]) .wordmark .a{text-shadow:0 0 18px color-mix(in srgb,var(--red) 70%,transparent)}
+
+/* The readout leans on monospaced-feeling detail: squarer corners, cyan rules. */
+:root[data-scene="hud"] .panel,
+:root[data-scene="hud"] .qrcard,
+:root[data-scene="hud"] .howto,
+:root[data-scene="hud"] .gostrip,
+:root[data-scene="hud"] .settings,
+:root[data-scene="hud"] .table-scroll{border-radius:0;border-color:color-mix(in srgb,var(--azure) 45%,var(--hair))}
+:root[data-scene="hud"] .tile,
+:root[data-scene="hud"] .key,
+:root[data-scene="hud"] .btn,
+:root[data-scene="hud"] .seg,
+:root[data-scene="hud"] input[type=text]{border-radius:0}
+:root[data-scene="hud"] .wordmark .a{color:var(--azure);text-shadow:0 0 16px color-mix(in srgb,var(--azure) 60%,transparent)}
+:root[data-scene="hud"] .intro-title .ch{text-shadow:0 0 26px color-mix(in srgb,var(--azure) 70%,transparent)}
 
 /* ---------- intro title card ---------- */
 #introCard{

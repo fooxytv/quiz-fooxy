@@ -294,5 +294,172 @@
     });
   }
 
-  window.Scenes = { comic, cosmic };
+
+  /* ================================================================ hud ==== */
+
+  /*
+   * A tactical readout: the briefing-screen look those films use for anything
+   * technical. Counter-rotating instrument rings over a receding floor grid, with
+   * a scan sweep and corner brackets. Geometry and type conventions only — no
+   * insignia, no borrowed interface.
+   */
+  function hud(canvas) {
+    let bars = [];
+
+    function seed() {
+      bars = Array.from({ length: 22 }, () => ({
+        v: Math.random(),
+        speed: 0.0004 + Math.random() * 0.0016,
+        phase: Math.random() * Math.PI * 2,
+      }));
+    }
+
+    function ring(ctx, cx, cy, r, from, to, width, colour, alpha) {
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, from, to);
+      ctx.stroke();
+    }
+
+    return makeScene(canvas, {
+      init: seed,
+      draw(S) {
+        const { ctx, w, h, t } = S;
+        const ink = token("--ink", "#DCE6F2");
+        const azure = token("--azure", "#4FD4FF");
+        const gold = token("--gold", "#FFC24A");
+        const paper = token("--paper", "#070B12");
+
+        ctx.clearRect(0, 0, w, h);
+        const bg = ctx.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, paper);
+        bg.addColorStop(1, paper);
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+
+        /* Floor grid, receding to a horizon just below centre. */
+        const hz = h * 0.58;
+        ctx.save();
+        ctx.globalAlpha = 0.16;
+        ctx.strokeStyle = azure;
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 16; i++) {
+          const k = i / 16;
+          const y = hz + Math.pow(k, 2.1) * (h - hz) * 1.25;
+          if (y > h) break;
+          ctx.globalAlpha = 0.16 * (1 - k * 0.7);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        const vanish = w * 0.5;
+        for (let i = -9; i <= 9; i++) {
+          ctx.globalAlpha = 0.1;
+          ctx.beginPath();
+          ctx.moveTo(vanish + i * 10, hz);
+          ctx.lineTo(vanish + i * (w * 0.16), h);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        /* Instrument rings, counter-rotating with broken arcs and tick marks. */
+        const cx = w * 0.5, cy = h * 0.42;
+        const base = Math.min(w, h) * 0.2;
+        ctx.save();
+        for (let layer = 0; layer < 3; layer++) {
+          const r = base * (1 + layer * 0.34);
+          const dir = layer % 2 === 0 ? 1 : -1;
+          const spin = t * 0.00016 * dir * (1 + layer * 0.3);
+          const gaps = 3 + layer;
+          for (let g = 0; g < gaps; g++) {
+            const from = spin + (g / gaps) * Math.PI * 2;
+            ring(ctx, cx, cy, r, from, from + (Math.PI * 2 / gaps) * 0.62,
+              layer === 1 ? 2.5 : 1.4, layer === 1 ? azure : ink, 0.3 - layer * 0.06);
+          }
+          const ticks = 36 + layer * 12;
+          ctx.globalAlpha = 0.22;
+          ctx.strokeStyle = layer === 2 ? gold : ink;
+          ctx.lineWidth = 1;
+          for (let i = 0; i < ticks; i++) {
+            const a = spin * 1.4 + (i / ticks) * Math.PI * 2;
+            const long = i % 6 === 0;
+            const r0 = r + 5;
+            const r1 = r0 + (long ? 11 : 5);
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+            ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+            ctx.stroke();
+          }
+        }
+        /* Core glow. */
+        const beat = 0.5 + 0.5 * Math.sin(t * 0.0012);
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, base * 0.95);
+        glow.addColorStop(0, `rgba(255,255,255,${0.05 + beat * 0.05})`);
+        glow.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(cx, cy, base * 0.95, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        /* Telemetry bars down the left, drifting independently. */
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = azure;
+        const bw = Math.min(90, w * 0.1);
+        bars.forEach((b, i) => {
+          const y = 24 + i * ((h - 48) / bars.length);
+          const v = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * b.speed + b.phase));
+          ctx.globalAlpha = 0.1 + v * 0.22;
+          ctx.fillRect(18, y, bw * v, 2);
+        });
+        ctx.restore();
+
+        /* Scan sweep. */
+        const sy = ((t * 0.045) % (h + 240)) - 120;
+        const sweep = ctx.createLinearGradient(0, sy - 110, 0, sy + 110);
+        sweep.addColorStop(0, "rgba(255,255,255,0)");
+        sweep.addColorStop(0.5, `rgba(${hexRgb(azure)},0.055)`);
+        sweep.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = sweep;
+        ctx.fillRect(0, sy - 110, w, 220);
+
+        /* Corner brackets, so the whole frame reads as an instrument. */
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = gold;
+        ctx.lineWidth = 2;
+        const m = 20, len = Math.min(46, w * 0.08);
+        for (const [ox, oy, dx, dy] of [[m, m, 1, 1], [w - m, m, -1, 1], [m, h - m, 1, -1], [w - m, h - m, -1, -1]]) {
+          ctx.beginPath();
+          ctx.moveTo(ox, oy + dy * len);
+          ctx.lineTo(ox, oy);
+          ctx.lineTo(ox + dx * len, oy);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        /* Vignette. */
+        const vig = ctx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.32, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
+        vig.addColorStop(0, "rgba(0,0,0,0)");
+        vig.addColorStop(1, "rgba(0,0,0,0.5)");
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, w, h);
+      },
+    });
+  }
+
+  /** "#rrggbb" -> "r,g,b" for use inside an rgba() string. */
+  function hexRgb(hex) {
+    const c = String(hex).replace("#", "");
+    const n = c.length === 3 ? c.split("").map((x) => x + x).join("") : c.slice(0, 6);
+    const v = parseInt(n, 16);
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255].join(",");
+  }
+
+  window.Scenes = { comic, cosmic, hud };
 })();

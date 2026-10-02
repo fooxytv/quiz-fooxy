@@ -1,4 +1,4 @@
-# Six Panels
+# MCU Quiz
 
 A Wordle-style superhero-film quiz built for a team sprint review. People scan a
 QR code, wait in a lobby, and the host counts everyone in together. Twelve words,
@@ -7,17 +7,15 @@ takes it.
 
 No accounts, no sign-in, no app. Open the link and type your name.
 
-## On the name and the look
+## On the look
 
-The quiz asks about Marvel films, because that is the subject. It is not branded
-as a Marvel product: the badge, the artwork and the music are all original work
-made for this repo, and the on-screen name is **Six Panels** — six guesses, six
-panels — rather than a lockup of somebody else's trademark.
+The badge, the three background scenes and all the audio are original work made
+for this repo — nothing here is a frame, still, logo or recording from any film.
+The quiz asks about Marvel films because that is the subject, which is ordinary
+referential use, the same as any pub quiz.
 
-Asking "which Asgardian swings a hammer" is ordinary referential use, the same as
-any pub quiz. Wrapping the page in a publisher's wordmark and logo is a different
-thing, so it does not. If you would rather it said something else, the wordmark is
-two spans near the top of `public/index.html` and `public/admin.html`.
+The on-screen name comes from the active theme, so changing it is a one-line edit
+in a theme file rather than a hunt through the markup.
 
 ## Why it is server-authoritative
 
@@ -32,7 +30,7 @@ Two things are deliberately kept out of the browser:
 
 ## How a session runs
 
-A pool of 50 words in six tiers — **warm up, easy, steady, tricky, hard,
+A pool of 100 words in six tiers — **warm up, easy, steady, tricky, hard,
 brutal** — and the host picks how many questions a round runs to (5, 10, 15, 20,
 25 or 30). Answers are 3 to 12 letters; the grid tightens its spacing and type to
 fit even SVARTALFHEIM on a phone.
@@ -49,12 +47,12 @@ The host screen prints the real figure for the chosen length:
 
 | round length | words two players share | |
 |---|---|---|
-| 10 | ~2.5 | 25% of the round |
-| 20 | ~9.3 | 46% |
-| 30 | ~18.8 | 68% |
+| 10 | ~1.2 | 12% of the round |
+| 20 | ~4.1 | 21% |
+| 30 | ~9.4 | 31% |
 
 Shorter rounds are more distinct, and adding words to the thin tiers helps most —
-the Words tab shows the depth of each. What matters for copying is that the word
+the host panel shows the depth of each. What matters for copying is that the word
 at *position seven* differs, and it does.
 
 Players land in a **lobby**: no clue, no clock, nothing to do but wait. The
@@ -72,13 +70,19 @@ A reset puts everybody back in the lobby, ready to run it again.
 ## Themes
 
 The look is swappable from the host screen, live, without reloading anyone's page
-or disturbing a round. Two ship built in:
+or disturbing a round. Three ship built in:
 
-- **Comic Press** — halftone dots, speed lines and inked panels. The default.
+- **Tactical Readout** — the default, and the one that fits a film quiz best:
+  counter-rotating instrument rings over a receding floor grid, a scan sweep,
+  corner brackets, square corners and cyan rules. Steel and cyan, built for a
+  projector.
 - **Cosmic Gauntlet** — deep space with a nebula wash, parallax starfield, rising
-  embers and a pulsing core, panels on frosted glass, and a title card whose
-  letters drop in one by one and loop while the lobby is up. Built for a big
-  screen in a dim room.
+  embers and a pulsing core. Panels on frosted glass.
+- **Comic Press** — halftone dots, speed lines and inked panels on newsprint. The
+  light-room option.
+
+The two dark themes carry a looping title card whose letters drop in one at a
+time.
 
 A theme is a palette, a wordmark, a background scene and an optional intro card.
 Drop a JSON file into the data volume at `themes/` and it appears in the Themes
@@ -95,7 +99,7 @@ behind the scene, if you want a still of your own back there.
 Everything is generated at run time; there are no media files in this repo and
 nothing is sampled, traced or transcribed from anyone's property.
 
-- `public/scenes.js` holds the background scenes. Each caps device pixel ratio
+- `public/scenes.js` holds the three background scenes. Each caps device pixel ratio
   at 2, scales its particle budget to the canvas area, stops animating while the
   tab is hidden, and draws a single static frame under
   `prefers-reduced-motion`. Dot spacing scales with the canvas so the per-frame
@@ -285,7 +289,7 @@ The **Words** tab in the admin portal edits the list as JSON, saved to
 own answer is refused. `tier` should be one of the six names so the draw can
 place it; anything else is treated as mid-difficulty. Changes apply on the **next reset**,
 so a round in progress is never disturbed. Delete the file to fall back to the
-fifty built-in puzzles.
+hundred built-in puzzles.
 
 ## Layout
 

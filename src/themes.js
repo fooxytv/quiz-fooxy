@@ -2,7 +2,7 @@
  * Themes. A theme is a palette, a wordmark, a background scene and an optional
  * intro card — enough to make the same quiz engine look like a different show.
  *
- * Two ship built in. More can be dropped into DATA_DIR/themes/*.json at run time
+ * Three ship built in. More can be dropped into DATA_DIR/themes/*.json at run time
  * without rebuilding the image, which is how you add your own without touching
  * this file.
  *
@@ -25,11 +25,39 @@ const HEX = /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 export const BUILTIN_THEMES = [
   {
+    id: "hud",
+    name: "Tactical Readout",
+    blurb: "The briefing-screen look: counter-rotating instrument rings over a receding floor grid, a scan sweep and corner brackets. Steel and cyan. The best fit for a film quiz on a big screen.",
+    scene: "hud",
+    wordmark: { lead: "MCU", tail: "Quiz" },
+    intro: {
+      title: "MCU QUIZ",
+      subtitle: "Six guesses each. The clock is running.",
+      everyMs: 15000,
+    },
+    palette: {
+      paper: "#070B12",
+      surface: "#0E1826",
+      sunk: "#0A1220",
+      ink: "#DCE8F5",
+      muted: "#7B93AD",
+      hair: "#1C2D42",
+      red: "#FF4D5E",
+      gold: "#FFC24A",
+      green: "#3DE0A8",
+      azure: "#4FD4FF",
+      "tile-edge": "#2A4259",
+      "on-solid": "#070B12",
+      "panel-shadow": "#02060C",
+    },
+    paletteDark: {},
+  },
+  {
     id: "comic",
     name: "Comic Press",
     blurb: "Halftone dots, speed lines and inked panels. Newsprint by day, late-edition by night.",
     scene: "comic",
-    wordmark: { lead: "SIX", tail: "Panels" },
+    wordmark: { lead: "MCU", tail: "Quiz" },
     intro: null,
     palette: {},            // the stylesheet's own values
     paletteDark: {},
@@ -39,10 +67,10 @@ export const BUILTIN_THEMES = [
     name: "Cosmic Gauntlet",
     blurb: "Deep space, drifting embers and a pulsing core, with a title card that assembles itself. The one for a big screen.",
     scene: "cosmic",
-    wordmark: { lead: "SIX", tail: "Panels" },
+    wordmark: { lead: "MCU", tail: "Quiz" },
     intro: {
-      title: "SIX PANELS",
-      subtitle: "Twenty words. Six guesses. One clock.",
+      title: "MCU QUIZ",
+      subtitle: "Six guesses each. The clock is running.",
       everyMs: 14000,
     },
     palette: {
@@ -70,10 +98,10 @@ function validateTheme(raw, id) {
     id: String(t.id || id || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32),
     name: String(t.name || t.id || "Untitled").slice(0, 48),
     blurb: String(t.blurb || "").slice(0, 160),
-    scene: String(t.scene || "comic").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32),
+    scene: String(t.scene || "hud").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32),
     wordmark: {
-      lead: String(t.wordmark?.lead ?? "SIX").slice(0, 14),
-      tail: String(t.wordmark?.tail ?? "Panels").slice(0, 18),
+      lead: String(t.wordmark?.lead ?? "MCU").slice(0, 14),
+      tail: String(t.wordmark?.tail ?? "Quiz").slice(0, 18),
     },
     intro: null,
     palette: {},

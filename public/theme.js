@@ -38,14 +38,14 @@
       if (!PALETTE_KEYS.includes(k) || !HEX.test(String(v))) continue;
       root.style.setProperty("--" + k, v);
     }
-    root.setAttribute("data-scene", theme.scene || "comic");
+    root.setAttribute("data-scene", theme.scene || "hud");
   }
 
   function applyWordmark(theme) {
     const lead = document.querySelector(".wordmark .a");
     const tail = document.querySelector(".wordmark .b");
-    if (lead) lead.textContent = theme.wordmark?.lead ?? "SIX";
-    if (tail) tail.textContent = theme.wordmark?.tail ?? "Panels";
+    if (lead) lead.textContent = theme.wordmark?.lead ?? "MCU";
+    if (tail) tail.textContent = theme.wordmark?.tail ?? "Quiz";
   }
 
   /* ---------------------------------------------------------------- scene --- */
@@ -55,7 +55,7 @@
     if (!canvas || !current) return;
     stopScene?.();
     stopScene = null;
-    const make = window.Scenes?.[current.scene] || window.Scenes?.comic;
+    const make = window.Scenes?.[current.scene] || window.Scenes?.hud;
     if (make) stopScene = make(canvas);
     if (current.backdropImage) {
       canvas.style.backgroundImage = `url("/assets/${encodeURIComponent(current.backdropImage)}")`;
