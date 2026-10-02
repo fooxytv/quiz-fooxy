@@ -32,10 +32,30 @@ Two things are deliberately kept out of the browser:
 
 ## How a session runs
 
-Twenty words, six guesses each, in five difficulty tiers: three warm-ups where
-the clue hands it to you, then easy, steady, tricky and hard, where the clue
-stops helping and starts hinting. The tier shows on the player's screen so the
-ramp is visible rather than just felt.
+A pool of 50 words in six tiers — **warm up, easy, steady, tricky, hard,
+brutal** — and the host picks how many questions a round runs to (5, 10, 15, 20,
+25 or 30). Answers are 3 to 12 letters; the grid tightens its spacing and type to
+fit even SVARTALFHEIM on a phone.
+
+**Every player gets their own draw.** Each round is assembled per person from the
+pool, stratified so everybody climbs the same difficulty curve on different
+words. The person beside you is not on the same question, so a glance at their
+screen tells you nothing and shouting an answer across the room does not help.
+
+That is not the same as no overlap. Drawing *k* words from a tier holding *m*
+means two players share about *k²/m* of them, and shallow tiers dominate — with
+three warm-ups in the pool, both players will usually get two of the same three.
+The host screen prints the real figure for the chosen length:
+
+| round length | words two players share | |
+|---|---|---|
+| 10 | ~2.5 | 25% of the round |
+| 20 | ~9.3 | 46% |
+| 30 | ~18.8 | 68% |
+
+Shorter rounds are more distinct, and adding words to the thin tiers helps most —
+the Words tab shows the depth of each. What matters for copying is that the word
+at *position seven* differs, and it does.
 
 Players land in a **lobby**: no clue, no clock, nothing to do but wait. The
 server does not even deal them a puzzle yet. When the host presses **Start**,
@@ -235,8 +255,11 @@ account.
    if the screen has speakers.
 2. People scan the QR, type a name, and land in the lobby. Names appear as they
    arrive. Nobody's clock is running.
-3. Optionally switch **theme** — *Cosmic Gauntlet* is the one for a projector.
-4. Pick a **time limit per word** (default 90s, or off) and a **countdown**
+3. Set **questions per round** (lobby only — it is locked once a round is under
+   way). The panel shows how deep each tier is and how much two players will
+   overlap at that length.
+4. Optionally switch **theme** — *Cosmic Gauntlet* is the one for a projector.
+5. Pick a **time limit per word** (default 90s, or off) and a **countdown**
    length (3s, 5s, 10s or 30s). The settings panel prints a live estimate of how
    long the round will take, so you can fit the slot:
 
@@ -245,11 +268,11 @@ account.
    | 45s | ~10 min | 18 min |
    | 60s | ~13 min | 23 min |
    | 90s | ~18 min | 33 min |
-5. Press **Start the quiz**. Everyone sees the same countdown; the host view
+6. Press **Start the quiz**. Everyone sees the same countdown; the host view
    flips itself to the leaderboard so you can watch.
-6. **Remove** takes someone off the board; they can be let back in, keeping the
+7. **Remove** takes someone off the board; they can be let back in, keeping the
    run they had.
-7. **Reset and kick everyone** clears the board and throws every player out to
+8. **Reset and kick everyone** clears the board and throws every player out to
    the join screen; each of them has to join again deliberately. Anyone you
    removed **stays removed** — only *Let back in* undoes that.
 
@@ -258,11 +281,11 @@ Destructive buttons need two taps — no accidental mid-session wipe.
 ## Changing the words
 
 The **Words** tab in the admin portal edits the list as JSON, saved to
-`DATA_DIR/words.json`. Answers are 4–8 letters, A–Z only, each needs a clue, and
-a clue containing its own answer is refused, and `tier` is free text shown as a
-badge. Changes apply on the **next reset**,
+`DATA_DIR/words.json`. Answers are 3–12 letters, A–Z only, each needs a clue, and a clue containing its
+own answer is refused. `tier` should be one of the six names so the draw can
+place it; anything else is treated as mid-difficulty. Changes apply on the **next reset**,
 so a round in progress is never disturbed. Delete the file to fall back to the
-twenty built-in puzzles.
+fifty built-in puzzles.
 
 ## Layout
 
@@ -298,6 +321,7 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 | `WS /ws` | round and removal events |
 | `GET /api/admin/board` | full leaderboard |
 | `POST /api/admin/start` | `{countdownMs}` → leaves the lobby on a shared instant |
+| `POST /api/admin/count` | `{count}` → questions per round, lobby only |
 | `POST /api/admin/limit` | `{limitMs}` |
 | `POST /api/admin/reset` | new round, board wiped |
 | `POST /api/admin/kick` / `unkick` | `{playerId}` |
@@ -315,7 +339,7 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 
 Or without Docker: `npm run dev` in one terminal, `npm test` in another.
 
-Seventy-four checks against a live server (`test/smoke.mjs`), driving two players at
+Ninety-two checks against a live server (`test/smoke.mjs`), driving two players at
 once: the lobby refusing guesses before the go, the clue staying hidden through
 the countdown, **both players receiving a byte-identical start instant**, marking
 and duplicate letters, answers staying withheld until a word closes, the
@@ -324,7 +348,12 @@ returning the round to the lobby and ejecting everyone while keeping removals.
 One check asserts that no answer appears anywhere in the board payload. The
 suite resets the round itself at the start, so it is safe to re-run against a
 long-lived container. The theme API is covered too, including a rejected unknown
-theme and a path-traversal attempt on the assets route.
+theme and a path-traversal attempt on the assets route. Per-player draws are
+covered from both ends: eight live players confirmed to open on the same tier but
+not all on the same word, and the draw itself asserted to ascend, never repeat,
+and differ across 40 draws. The live check uses eight players rather than four
+because with three warm-up words four would collide by chance about once in
+twenty runs, and a flaky test is worse than no test.
 
 The scenes are additionally executed headlessly against a recording canvas stub
 (`node /tmp/scenecheck.mjs` pattern) to prove 120 frames run at both desktop and

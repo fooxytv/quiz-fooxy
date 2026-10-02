@@ -83,13 +83,17 @@ input:focus-visible,textarea:focus-visible{outline:3px solid var(--azure);outlin
 .tbar.warn i{background:var(--gold)}
 .tbar.crit i{background:var(--red)}
 
-.grid{--gh:44svh;--tmax:62px;--gap:6px;display:grid;gap:var(--gap);margin:0 auto;
+.grid{
+  --gh:44svh;--tmax:62px;
+  --gap:clamp(2px, calc(10vw / var(--len)), 6px);
+  display:grid;gap:var(--gap);margin:0 auto;
   width:min(100%,calc(var(--len) * var(--tmax)),calc((var(--gh) - 5 * var(--gap)) * var(--len) / 6 + (var(--len) - 1) * var(--gap)))}
 @supports not (height:1svh){.grid{--gh:44vh}}
 .grid-row{display:grid;grid-template-columns:repeat(var(--len),minmax(0,1fr));gap:var(--gap)}
 .tile{aspect-ratio:1/1;min-width:0;display:flex;align-items:center;justify-content:center;
   border:2px solid var(--tile-edge);background:var(--surface);border-radius:2px;
-  font-weight:900;font-size:clamp(17px,5.2vw,29px);line-height:1;text-transform:uppercase;color:var(--ink)}
+  font-weight:900;font-size:clamp(10px, calc(46vw / var(--len)), 29px);
+  line-height:1;text-transform:uppercase;color:var(--ink)}
 .tile.filled{border-color:var(--ink)}
 .tile.hit{background:var(--green);border-color:var(--green);color:var(--on-solid)}
 .tile.near{background:var(--gold);border-color:var(--gold);color:var(--on-solid)}
@@ -339,6 +343,7 @@ body.art-on #backdrop{opacity:1}
 .tier.tSTEADY{background:var(--azure)}
 .tier.tTRICKY{background:var(--gold)}
 .tier.tHARD{background:var(--red)}
+.tier.tBRUTAL{background:var(--ink);color:var(--paper);box-shadow:0 0 0 1.5px var(--red)}
 
 /* ---------- themed backdrop ---------- */
 #backdrop.has-image{background-size:cover;background-position:center}
@@ -426,3 +431,10 @@ body:not(.art-on) #introCard{display:none}
   display:inline-block;font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;
   background:var(--red);color:#FFF;border-radius:2px;padding:1px 5px;margin-left:6px;vertical-align:2px;
 }
+.tierbars{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tierbar{
+  display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--hair);border-radius:2px;
+  padding:3px 8px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+}
+.tierbar i{font-style:normal;font-weight:900;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+.seg button:disabled{opacity:.4;cursor:not-allowed}

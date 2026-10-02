@@ -63,7 +63,8 @@ db.exec(`
     puzzle_count INTEGER NOT NULL,
     phase        TEXT NOT NULL DEFAULT 'lobby',
     starts_at    INTEGER,
-    countdown_ms INTEGER NOT NULL DEFAULT 5000
+    countdown_ms INTEGER NOT NULL DEFAULT 5000,
+    question_count INTEGER NOT NULL DEFAULT 20
   );
   CREATE TABLE IF NOT EXISTS players (
     id        TEXT PRIMARY KEY,
@@ -72,7 +73,8 @@ db.exec(`
     joined_at INTEGER NOT NULL,
     last_seen INTEGER NOT NULL,
     idx       INTEGER NOT NULL DEFAULT 0,
-    blocked   INTEGER NOT NULL DEFAULT 0
+    blocked   INTEGER NOT NULL DEFAULT 0,
+    sequence  TEXT
   );
   CREATE INDEX IF NOT EXISTS players_round ON players(round_id);
   CREATE TABLE IF NOT EXISTS progress (
@@ -106,6 +108,8 @@ ensureColumn("rounds", "phase", "phase TEXT NOT NULL DEFAULT 'lobby'");
 ensureColumn("rounds", "starts_at", "starts_at INTEGER");
 ensureColumn("rounds", "countdown_ms", "countdown_ms INTEGER NOT NULL DEFAULT 5000");
 ensureColumn("blocklist", "name", "name TEXT");
+ensureColumn("rounds", "question_count", "question_count INTEGER NOT NULL DEFAULT 20");
+ensureColumn("players", "sequence", "sequence TEXT");
 
 /* ---------- word list ---------- */
 
@@ -155,11 +159,12 @@ export function activeRound() {
   return newRound(DEFAULT_LIMIT_MS);
 }
 
-export function newRound(limitMs, countdownMs = 5000) {
+export function newRound(limitMs, countdownMs = 5000, questionCount = 20) {
   const puzzles = loadPuzzles();
+  const count = Math.max(1, Math.min(questionCount, puzzles.length));
   const info = db.prepare(
-    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms) VALUES (?, ?, ?, 'lobby', NULL, ?)"
-  ).run(Date.now(), limitMs, puzzles.length, countdownMs);
+    "INSERT INTO rounds (started_at, limit_ms, puzzle_count, phase, starts_at, countdown_ms, question_count) VALUES (?, ?, ?, 'lobby', NULL, ?, ?)"
+  ).run(Date.now(), limitMs, puzzles.length, countdownMs, count);
   return db.prepare("SELECT * FROM rounds WHERE id = ?").get(Number(info.lastInsertRowid));
 }
 
@@ -167,21 +172,40 @@ export function setRoundLimit(roundId, limitMs) {
   db.prepare("UPDATE rounds SET limit_ms = ? WHERE id = ?").run(limitMs, roundId);
 }
 
+/* Lobby only: changing length mid-round would scramble runs in progress. */
+export function setRoundCount(roundId, count) {
+  tx(() => {
+    db.prepare("UPDATE rounds SET question_count = ? WHERE id = ?").run(count, roundId);
+    /* Every waiting player needs a fresh draw at the new length. */
+    db.prepare("UPDATE players SET sequence = NULL, idx = 0 WHERE round_id = ?").run(roundId);
+    db.prepare("DELETE FROM progress WHERE player_id IN (SELECT id FROM players WHERE round_id = ?)").run(roundId);
+  });
+}
+
+export function setPlayerSequence(id, seq) {
+  db.prepare("UPDATE players SET sequence = ? WHERE id = ?").run(JSON.stringify(seq), id);
+}
+
 /**
  * Leave the lobby. Everyone already waiting gets puzzle 1 stamped with the SAME
  * start instant, so the countdown lands identically for all of them and network
  * jitter cannot hand anyone a head start.
  */
-export function startRound(roundId, countdownMs) {
+export function startRound(roundId, countdownMs, drawSequence) {
   const startsAt = Date.now() + countdownMs;
   tx(() => {
     db.prepare("UPDATE rounds SET phase = 'running', starts_at = ?, countdown_ms = ? WHERE id = ?")
       .run(startsAt, countdownMs, roundId);
-    const waiting = db.prepare("SELECT id FROM players WHERE round_id = ? AND blocked = 0").all(roundId);
+    const waiting = db.prepare("SELECT id, sequence FROM players WHERE round_id = ? AND blocked = 0").all(roundId);
+    const seqStmt = db.prepare("UPDATE players SET sequence = ? WHERE id = ?");
     const ins = db.prepare(
       "INSERT OR REPLACE INTO progress (player_id, puzzle_idx, status, started_at) VALUES (?, 0, 'open', ?)"
     );
-    for (const p of waiting) ins.run(p.id, startsAt);
+    for (const p of waiting) {
+      /* Each player gets their own draw, so neighbours cannot copy. */
+      if (!p.sequence && drawSequence) seqStmt.run(JSON.stringify(drawSequence()), p.id);
+      ins.run(p.id, startsAt);
+    }
   });
   return db.prepare("SELECT * FROM rounds WHERE id = ?").get(roundId);
 }
@@ -201,7 +225,7 @@ export function upsertPlayer({ id, roundId, name }) {
     if (existing.round_id !== roundId) {
       tx(() => {
         db.prepare("DELETE FROM progress WHERE player_id = ?").run(id);
-        db.prepare("UPDATE players SET round_id = ?, idx = 0, name = ?, last_seen = ? WHERE id = ?")
+        db.prepare("UPDATE players SET round_id = ?, idx = 0, sequence = NULL, name = ?, last_seen = ? WHERE id = ?")
           .run(roundId, name || existing.name, now, id);
       });
     } else if (name && name !== existing.name) {

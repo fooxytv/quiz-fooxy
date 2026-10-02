@@ -6,7 +6,7 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import QRCode from "qrcode";
 
-import { MAX_TRIES, clientMeta, validatePuzzles } from "./words.js";
+import { MAX_TRIES, clientMeta, validatePuzzles, buildSequence, expectedOverlap, TIER_ORDER, COUNT_CHOICES, DEMO } from "./words.js";
 import { mark, resultCode, rowMs, compareEntries } from "./game.js";
 import { requireAdmin, verifyAdmin, parseCookies, accessConfigured, insecureLocal, devBypass } from "./auth.js";
 import * as store from "./db.js";
@@ -60,13 +60,31 @@ function cleanName(v) {
     .slice(0, 28);
 }
 
+/* --------------------------------------------------------------- sequence ---- */
+
+/**
+ * The puzzles THIS player is playing, in their order. Everyone climbs the same
+ * tier curve; the words differ, so a neighbour's screen is no help.
+ */
+function playerPuzzles(player, round, pool) {
+  let seq = [];
+  try { seq = JSON.parse(player.sequence || "[]"); } catch (e) { seq = []; }
+  seq = seq.filter((i) => Number.isInteger(i) && i >= 0 && i < pool.length);
+  if (!seq.length) {
+    seq = buildSequence(pool, round.question_count);
+    store.setPlayerSequence(player.id, seq);
+  }
+  return seq.map((i) => pool[i]);
+}
+
 /* ------------------------------------------------------------ player state ---- */
 
 /**
  * The whole picture a player is allowed to see: their own grid, their clock, and
  * the puzzle they are on. Answers appear only for puzzles they have finished.
  */
-function playerState(player, round, puzzles) {
+function playerState(player, round, pool) {
+  const puzzles = playerPuzzles(player, round, pool);
   const now = Date.now();
   const waiting = round.phase !== "running";
   const counting = !waiting && round.starts_at > now;
@@ -148,12 +166,13 @@ function buildBoard() {
   }
   const now = Date.now();
 
+  const count = round.question_count;
   const entries = store.roundPlayers(round.id).map((p) => {
     const rows = store.allRows(p.id);
     let solved = 0, guesses = 0, totalMs = 0, closedCount = 0;
-    const results = new Array(puzzles.length).fill(0);
+    const results = new Array(count).fill(0);
     for (const r of rows) {
-      if (r.puzzle_idx >= puzzles.length) continue;
+      if (r.puzzle_idx >= count) continue;
       results[r.puzzle_idx] = resultCode(r);
       if (r.status === "win") solved++;
       if (r.status !== "open") closedCount++;
@@ -164,12 +183,12 @@ function buildBoard() {
     return {
       id: p.id,
       name: p.name,
-      idx: Math.min(p.idx, puzzles.length - 1),
+      idx: Math.min(p.idx, count - 1),
       solved,
       guesses,
       totalMs,
       results,
-      done: closedCount >= puzzles.length,
+      done: closedCount >= count,
       curStartedAt: current ? current.started_at : null,
       online: now - p.last_seen < 45000,
       joinedAt: p.joined_at,
@@ -188,8 +207,17 @@ function buildBoard() {
     startsAt: round.starts_at,
     countdownMs: round.countdown_ms,
     countdownChoices: COUNTDOWN_CHOICES,
+    countChoices: COUNT_CHOICES.filter((n) => n <= puzzles.length),
     limitMs: round.limit_ms,
-    puzzleCount: puzzles.length,
+    puzzleCount: count,
+    poolSize: puzzles.length,
+    poolTiers: TIER_ORDER.map((tier) => ({
+      tier,
+      have: puzzles.filter((p) => (p.tier || "").toUpperCase() === tier).length,
+    })),
+    demo: DEMO,
+    /* So the host can see whether the pool is deep enough for the length chosen. */
+    expectedShared: Math.round(expectedOverlap(puzzles, count) * 10) / 10,
     maxTries: MAX_TRIES,
     serverNow: now,
     startedAt: round.started_at,
@@ -217,7 +245,8 @@ app.post("/api/join", (req, res) => {
   const player = store.upsertPlayer({ id: pid, roundId: round.id, name });
   if (round.phase === "running") {
     /* Joining after the go: this player's own clock starts now, not at the go. */
-    store.openRow(player.id, Math.min(player.idx, puzzles.length - 1));
+    const mine = playerPuzzles(store.getPlayer(pid), round, puzzles);
+    store.openRow(player.id, Math.min(player.idx, mine.length - 1));
   }
   broadcastBoard();
   res.json(playerState(store.getPlayer(pid), round, puzzles));
@@ -236,8 +265,9 @@ app.get("/api/state", (req, res) => {
     return res.json({
       joined: false,
       round: round.id,
+      phase: round.phase,
       limitMs: round.limit_ms,
-      puzzleCount: puzzles.length,
+      puzzleCount: round.question_count,
       serverNow: Date.now(),
     });
   }
@@ -247,7 +277,8 @@ app.get("/api/state", (req, res) => {
   }
   const fresh = store.getPlayer(player.id);
   if (!fresh.blocked && round.phase === "running") {
-    const idx = Math.min(fresh.idx, puzzles.length - 1);
+    const mine = playerPuzzles(fresh, round, puzzles);
+    const idx = Math.min(fresh.idx, mine.length - 1);
     store.expireRow(fresh.id, idx, round.limit_ms);
     store.openRow(fresh.id, idx);
   }
@@ -269,8 +300,9 @@ app.post("/api/guess", (req, res) => {
   if (round.starts_at > Date.now()) {
     return res.status(409).json({ error: "counting_down", message: "Hold on — the countdown is still running." });
   }
-  const idx = Math.min(player.idx, puzzles.length - 1);
-  const puzzle = puzzles[idx];
+  const mine = playerPuzzles(player, round, puzzles);
+  const idx = Math.min(player.idx, mine.length - 1);
+  const puzzle = mine[idx];
 
   /* The clock is the server's. An expired word closes before the guess counts. */
   store.expireRow(player.id, idx, round.limit_ms);
@@ -318,10 +350,11 @@ app.post("/api/next", (req, res) => {
     return res.status(409).json({ error: "not_started" });
   }
 
-  const idx = Math.min(player.idx, puzzles.length - 1);
+  const mine = playerPuzzles(player, round, puzzles);
+  const idx = Math.min(player.idx, mine.length - 1);
   store.expireRow(player.id, idx, round.limit_ms);
   const row = store.getRow(player.id, idx);
-  if (row && row.status !== "open" && idx < puzzles.length - 1) {
+  if (row && row.status !== "open" && idx < mine.length - 1) {
     store.setPlayerIdx(player.id, idx + 1);
     store.openRow(player.id, idx + 1);
   }
@@ -351,16 +384,36 @@ app.post("/api/admin/start", requireAdmin, (req, res) => {
   }
   const ms = Number(req.body?.countdownMs);
   const countdownMs = COUNTDOWN_CHOICES.includes(ms) ? ms : round.countdown_ms;
-  const fresh = store.startRound(round.id, countdownMs);
+  const pool = store.loadPuzzles();
+  const fresh = store.startRound(round.id, countdownMs, () => buildSequence(pool, round.question_count));
   broadcastRound();
   broadcastBoard();
   res.json({ ok: true, startsAt: fresh.starts_at, countdownMs });
 });
 
+app.post("/api/admin/count", requireAdmin, (req, res) => {
+  const round = store.activeRound();
+  if (round.phase === "running") {
+    return res.status(409).json({
+      error: "round_running",
+      message: "Round length can only change in the lobby. Reset first.",
+    });
+  }
+  const n = Number(req.body?.count);
+  const pool = store.loadPuzzles();
+  if (!COUNT_CHOICES.includes(n) || n > pool.length) {
+    return res.status(400).json({ error: "bad_count", message: `Pick one of ${COUNT_CHOICES.filter((c) => c <= pool.length).join(", ")}.` });
+  }
+  store.setRoundCount(round.id, n);
+  broadcastRound();
+  broadcastBoard();
+  res.json({ ok: true, count: n });
+});
+
 app.post("/api/admin/reset", requireAdmin, (req, res) => {
   const old = store.activeRound();
   store.wipeRound(old.id);
-  const fresh = store.newRound(old.limit_ms, old.countdown_ms);
+  const fresh = store.newRound(old.limit_ms, old.countdown_ms, old.question_count);
   /* Everyone is out, not merely cleared: every page returns to the join screen
      and has to opt back in. Removals are deliberately NOT lifted. */
   broadcastAll({ type: "ejected", round: fresh.id });
@@ -573,7 +626,7 @@ server.listen(PORT, () => {
   console.log(`marvel-quiz listening on :${PORT}`);
   console.log(`  public url   ${PUBLIC_URL}`);
   console.log(`  data dir     ${store.DATA_DIR}`);
-  console.log(`  puzzles      ${store.loadPuzzles().length}`);
+  console.log(`  pool         ${store.loadPuzzles().length} words`);
   console.log(`  theme        ${activeTheme().id}  (${loadThemes(store.DATA_DIR).length} available)`);
   console.log(`  admin auth   ${authMode}`);
   if (insecureLocal) {

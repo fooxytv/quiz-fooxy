@@ -9,8 +9,10 @@
   "use strict";
 
   const LIMITS = [0, 45000, 60000, 90000, 120000, 180000];
-  /* Teaching example. Deliberately not one of the real answers. */
-  const DEMO = { answer: "NEBULA", guesses: ["BANNER", "NEBULA"] };
+  /* The worked example is served by the server, which guarantees it is not a
+     word anybody could be given. */
+  const FALLBACK_DEMO = { answer: "FRIGGA", guesses: ["GARAGE", "FRIGGA"] };
+  const demo = () => (board && board.demo) || FALLBACK_DEMO;
 
   let board = null;
   let tab = "lobby";
@@ -148,6 +150,25 @@
     </div>`;
   }
 
+  function lengthMarkup() {
+    const running = board.phase === "running";
+    const shared = board.expectedShared || 0;
+    const pct = board.puzzleCount ? Math.round((shared / board.puzzleCount) * 100) : 0;
+    return `<div class="settings">
+      <h4>Questions per round</h4>
+      <p class="meta" style="margin:0">Each player gets their own draw from the pool of ${board.poolSize}, climbing the same difficulty curve on different words &mdash; so the person beside you is not on the same question.</p>
+      <div class="seg" style="margin:10px 0 0" role="group" aria-label="Questions per round">
+        ${(board.countChoices || []).map((n) => `<button data-count="${n}" aria-pressed="${n === board.puzzleCount}" type="button" ${running ? "disabled" : ""}>${n}</button>`).join("")}
+      </div>
+      ${running
+        ? `<p class="meta" style="margin:10px 0 0">Locked while a round is under way &mdash; reset to change it.</p>`
+        : `<p class="meta" style="margin:10px 0 0">At ${board.puzzleCount} questions two players will have roughly <b>${shared} words in common</b> (${pct}% of the round), because some tiers are shallow. Shorter rounds overlap less; adding words to the thin tiers below helps most.</p>`}
+      <div class="tierbars">
+        ${(board.poolTiers || []).map((t) => `<span class="tierbar"><b>${esc(t.tier)}</b><i>${t.have}</i></span>`).join("")}
+      </div>
+    </div>`;
+  }
+
   function settingsMarkup() {
     return `<div class="settings">
       <h4>Time limit per word</h4>
@@ -219,6 +240,17 @@
       }
     };
 
+    root.querySelectorAll("[data-count]").forEach((b) => {
+      b.onclick = async () => {
+        const n = Number(b.dataset.count);
+        if (n === board.puzzleCount) return;
+        try {
+          await api("/api/admin/count", { method: "POST", body: { count: n } });
+          hostMsg(`Round length is now ${n} questions. Everyone waiting gets a fresh draw.`, "ok");
+        } catch (e) { hostMsg(e.message, "err"); }
+      };
+    });
+
     const rb = root.querySelector("#resetBtn");
     if (rb) wireDanger(rb, "Tap again to wipe the board", async () => {
       await api("/api/admin/reset", { method: "POST" });
@@ -246,7 +278,7 @@
   /* --------------------------------------------------------------- lobby --- */
 
   function markDemo(guess) {
-    const a = DEMO.answer, n = a.length, out = new Array(n).fill("miss"), pool = {};
+    const a = demo().answer, n = a.length, out = new Array(n).fill("miss"), pool = {};
     for (let i = 0; i < n; i++) {
       if (guess[i] === a[i]) out[i] = "hit";
       else pool[a[i]] = (pool[a[i]] || 0) + 1;
@@ -258,8 +290,9 @@
     return out;
   }
   function exampleRow(i) {
-    const g = DEMO.guesses[i], m = markDemo(g);
-    return `<div class="exgrid">${g.split("").map((c, k) => `<div class="tile ${m[k]}">${c}</div>`).join("")}</div>`;
+    const g = demo().guesses[i], m = markDemo(g);
+    return `<div class="exgrid" style="--len:${g.length};grid-template-columns:repeat(${g.length},34px)">${
+      g.split("").map((c, k) => `<div class="tile ${m[k]}">${c}</div>`).join("")}</div>`;
   }
 
   function renderLobby() {
@@ -293,10 +326,10 @@
           </ul>
 
           <div class="exwrap">
-            <div class="cat" style="margin-bottom:10px">Worked example &middot; the answer here was ${DEMO.answer}</div>
+            <div class="cat" style="margin-bottom:10px">Worked example &middot; the answer here was ${esc(demo().answer)}</div>
             <div class="exrow">
               ${exampleRow(0)}
-              <div class="excap">First guess. <b>Amber</b> letters are in the word but in the wrong place. <b>Grey</b> isn't in the word at all — the second N is grey because there's only one N.</div>
+              <div class="excap">First guess. <b>Amber</b> letters are in the word but in the wrong place. <b>Grey</b> isn't in there at all &mdash; and the second A is grey because the answer only has one.</div>
             </div>
             <div class="exrow">
               ${exampleRow(1)}
@@ -314,6 +347,7 @@
         </div>
       </div>
       ${goStripMarkup()}
+      ${lengthMarkup()}
       ${settingsMarkup()}
       ${blockedMarkup()}
       ${hostbarMarkup()}`;

@@ -115,8 +115,10 @@ check("puzzle 2 answer withheld", r.data.current.answer === null);
 
 // solve puzzle 2 first try, using the answer we can only know by cheating the test
 // (read it straight from the module, which is exactly what a browser cannot do)
+/* The player's own second word, which only the server knows until it closes. */
+const seqProbe = (await call("/api/state")).data;
 const { BUILTIN_PUZZLES } = await import("../src/words.js");
-const p2 = BUILTIN_PUZZLES[1].answer;
+const p2 = BUILTIN_PUZZLES.find((p) => p.hint === seqProbe.current.hint).answer;
 r = await call("/api/guess", "POST", { guess: p2 });
 check("correct guess wins", r.data.current.status === "win", `status=${r.data.current.status}`);
 check("all marks green on a win", r.data.current.rows.at(-1).marks.every((m) => m === "hit"));
@@ -165,6 +167,67 @@ r = await call("/api/admin/board");
 const rivalRow = r.data.players.find((p) => p.name === "Rival");
 check("on-time player is not flagged late", rivalRow && rivalRow.late === false);
 as("me");
+
+// ---- round length and per-player draws ------------------------------------
+r = await call("/api/admin/board");
+check("board reports the pool and the round length",
+  r.data.poolSize >= 20 && r.data.puzzleCount >= 1,
+  `pool=${r.data.poolSize} count=${r.data.puzzleCount}`);
+check("board reports tier depth", Array.isArray(r.data.poolTiers) && r.data.poolTiers.length === 6);
+check("board carries a worked example", !!r.data.demo && !!r.data.demo.answer);
+check("the worked example is NOT a word anyone could be dealt",
+  !BUILTIN_PUZZLES.some((p) => p.answer === r.data.demo.answer), `demo=${r.data.demo.answer}`);
+
+r = await call("/api/admin/count", "POST", { count: 10 });
+check("length change refused mid-round", r.status === 409 && r.data.error === "round_running");
+r = await call("/api/admin/reset", "POST");
+r = await call("/api/admin/count", "POST", { count: 10 });
+check("length change accepted in the lobby", r.data.ok === true && r.data.count === 10);
+r = await call("/api/admin/count", "POST", { count: 7 });
+check("bogus length refused", r.status === 400 && r.data.error === "bad_count");
+
+/* Four players, one start: same curve, different words. */
+/* Eight, not four: with only three warm-up words, four players landing on the
+   same opening happens by chance about 4% of the time, and a test that fails one
+   run in twenty is worse than no test. At eight it is under 0.02%. */
+const crowd = ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"];
+for (const n of crowd) { as(n); await call("/api/join", "POST", { name: n }); }
+as("me");
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+const go2 = r.data.startsAt;
+await sleep(Math.max(0, go2 - Date.now()) + 250);
+
+const seen = [];
+for (const n of crowd) {
+  as(n);
+  const st = (await call("/api/state")).data;
+  seen.push(st);
+}
+as("me");
+check("everyone has the same round length", new Set(seen.map((s) => s.puzzleCount)).size === 1 && seen[0].puzzleCount === 10);
+check("everyone starts on the same instant", new Set(seen.map((s) => s.current.startedAt)).size === 1);
+check("everyone opens on the same tier", new Set(seen.map((s) => s.current.tier)).size === 1,
+  `tiers=${seen.map((s) => s.current.tier).join("/")}`);
+check("players do not all get the same first word",
+  new Set(seen.map((s) => s.current.hint)).size > 1,
+  `${new Set(seen.map((s) => s.current.hint)).size} distinct openings across ${crowd.length} players`);
+
+/* And deterministically, at the algorithm level, independent of luck. */
+const { buildSequence } = await import("../src/words.js");
+const draws = Array.from({ length: 40 }, () => buildSequence(BUILTIN_PUZZLES, 10).join(","));
+check("draws differ between players", new Set(draws).size > 30,
+  `${new Set(draws).size} distinct sequences in 40 draws`);
+const ascends = buildSequence(BUILTIN_PUZZLES, 20)
+  .map((i) => ["WARM UP", "EASY", "STEADY", "TRICKY", "HARD", "BRUTAL"].indexOf(BUILTIN_PUZZLES[i].tier));
+check("a draw always ascends in difficulty", ascends.every((v, k) => k === 0 || v >= ascends[k - 1]),
+  ascends.join(""));
+check("a draw never repeats a word", new Set(buildSequence(BUILTIN_PUZZLES, 30)).size === 30);
+check("no answer is leaked to any of them", seen.every((s) => s.current.answer === null));
+
+/* A long answer must still be playable: the pool has 12-letter words. */
+const longest = Math.max(...BUILTIN_PUZZLES.map((p) => p.answer.length));
+check("pool includes long answers for the grid to cope with", longest >= 10, `longest=${longest}`);
+check("every answer is 3-12 letters A-Z", BUILTIN_PUZZLES.every((p) => /^[A-Z]{3,12}$/.test(p.answer)));
 
 // ---- themes ---------------------------------------------------------------
 r = await call("/api/theme");
