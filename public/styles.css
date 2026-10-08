@@ -23,32 +23,63 @@ body{
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 }
 h1,h2,h3,h4{font-family:"Big Shoulders Display","Chivo",sans-serif;font-weight:800;letter-spacing:.01em;text-transform:uppercase;text-wrap:balance;margin:0}
+/*
+ * Comic lettering, kept for the few places that set the tone -- the wordmark,
+ * the hero line, the countdown, the answer. Everywhere else stays on the
+ * condensed grotesque, which is what actually reads at a glance in a table of
+ * numbers. Bangers everywhere would be a novelty font, not a design.
+ */
+.letter{font-family:"Bangers","Big Shoulders Display",sans-serif;font-weight:400;letter-spacing:.02em}
 .mono-num{font-variant-numeric:tabular-nums}
 img{max-width:100%}
 [hidden]{display:none!important}
 
 .topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--paper);border-bottom:2px solid var(--ink);
-  background-image:radial-gradient(var(--dot) 1.1px,transparent 1.2px);background-size:7px 7px}
+  background-image:radial-gradient(var(--dot) 1.6px,transparent 1.7px),radial-gradient(var(--dot) 1.6px,transparent 1.7px);
+  background-size:8px 8px,8px 8px;background-position:0 0,4px 4px}
 .topbar .inner{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .wordmark{display:flex;align-items:baseline;gap:7px;min-width:0}
-.wordmark .a{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:27px;line-height:1;letter-spacing:.02em;color:var(--red)}
-.wordmark .b{font-family:"Big Shoulders Display",sans-serif;font-weight:700;font-size:27px;line-height:1;letter-spacing:.14em;text-transform:uppercase}
+.wordmark .a{font-family:"Bangers",sans-serif;font-weight:400;font-size:31px;line-height:1;letter-spacing:.04em;color:var(--red);
+  text-shadow:2px 2px 0 var(--ink)}
+.wordmark .b{font-family:"Bangers",sans-serif;font-weight:400;font-size:31px;line-height:1;letter-spacing:.1em;text-transform:uppercase}
 .spacer{flex:1 1 auto}
 main{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
 .wrap-narrow{max-width:560px;margin:0 auto}
 
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.1em;
-  text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1.5px solid var(--hair);color:var(--muted);white-space:nowrap}
+  text-transform:uppercase;padding:4px 9px;border-radius:0;border:2px solid var(--hair);color:var(--muted);white-space:nowrap}
 .pill.live{border-color:var(--green);color:var(--green)}
 .pill.warn{border-color:var(--gold);color:var(--gold)}
-.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto}
+.dot{width:7px;height:7px;border-radius:0;background:currentColor;flex:0 0 auto}
 .dot.pulse{animation:pulse 2.4s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 .panel{background:var(--surface);border:2px solid var(--ink);border-radius:3px;box-shadow:5px 5px 0 var(--panel-shadow)}
 .panel-pad{padding:18px}
-.halftone{background-image:radial-gradient(var(--dot) 1.1px,transparent 1.2px);background-size:7px 7px}
+/*
+ * Ben-Day: one regular screen of dots on a 45-degree lattice, the way a press
+ * lays it down. The old version was a sparse square grid that read as sensor
+ * noise rather than print. Two offset layers give the staggered rows.
+ */
+.halftone{
+  background-image:radial-gradient(var(--dot) 1.6px,transparent 1.7px),
+                   radial-gradient(var(--dot) 1.6px,transparent 1.7px);
+  background-size:8px 8px,8px 8px;
+  background-position:0 0,4px 4px;
+}
 .hr{height:2px;background:var(--ink);opacity:.14;border:0;margin:16px 0}
+/*
+ * The narration box. A comic does not set its rules in a paragraph of body
+ * copy; it puts one line in a yellow box with a hard black edge, in the corner
+ * of the panel. Anything the player has to be told goes in one of these.
+ */
+.caption{
+  display:block;background:var(--gold);color:#17161A;border:2.5px solid #17161A;
+  box-shadow:3px 3px 0 #17161A;padding:7px 11px;margin:0 0 14px;
+  font-family:"Big Shoulders Display",sans-serif;font-weight:700;font-size:15px;
+  letter-spacing:.04em;line-height:1.2;text-transform:uppercase;
+}
+.caption b{font-weight:800}
 .meta{color:var(--muted);font-size:13px}
 .cat{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--azure);margin-bottom:2px}
 
@@ -72,13 +103,23 @@ input:focus-visible,textarea:focus-visible{outline:3px solid var(--azure);outlin
 
 /* ---------- play ---------- */
 .puzhead{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
-.counter{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:42px;line-height:.85;color:var(--red);flex:0 0 auto;font-variant-numeric:tabular-nums}
-.counter small{display:block;font-size:12px;letter-spacing:.14em;color:var(--muted)}
+/*
+ * The panel number, the way a comic puts it in the corner: one solid tab, not a
+ * big numeral with a caption stacked under it. The stacked version clipped --
+ * the 42px line-height of .85 cut the descenders off the "of 10" beneath it.
+ */
+.counter{
+  display:inline-flex;align-items:baseline;gap:5px;align-self:flex-start;flex:0 0 auto;
+  font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:20px;line-height:1;
+  letter-spacing:.06em;font-variant-numeric:tabular-nums;
+  background:var(--ink);color:var(--paper);padding:6px 10px 5px;
+}
+.counter small{display:inline;font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.72}
 .hint{font-family:"Big Shoulders Display",sans-serif;font-weight:700;font-size:25px;line-height:1.05;text-transform:uppercase}
 .timebig{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:23px;font-variant-numeric:tabular-nums;line-height:1}
 .cd.warn{color:var(--gold)}
 .cd.crit{color:var(--red)}
-.tbar{height:7px;background:var(--sunk);border:1.5px solid var(--hair);border-radius:999px;overflow:hidden;margin:0 0 14px}
+.tbar{height:9px;background:var(--sunk);border:2px solid var(--ink);border-radius:0;overflow:hidden;margin:0 0 14px}
 .tbar i{display:block;height:100%;width:100%;background:var(--green);transition:width .95s linear}
 .tbar.warn i{background:var(--gold)}
 .tbar.crit i{background:var(--red)}
@@ -184,9 +225,12 @@ input:focus-visible,textarea:focus-visible{outline:3px solid var(--azure);outlin
 .board-head h2{font-size:34px;line-height:.95}
 .podium{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
 .pod{border:2px solid var(--ink);border-radius:3px;background:var(--surface);padding:12px 14px;box-shadow:5px 5px 0 var(--panel-shadow)}
-.pod.p1{background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 22%,var(--surface)),var(--surface))}
+/* Flat gold, not a gradient. Print lays down one ink, and a soft vertical fade
+   is the one thing on this screen that could not have come off a press. */
+.pod.p1{background:var(--gold);color:#17161A;border-width:3px}
+.pod.p1 .nm,.pod.p1 .ln b{color:#17161A}
 .pod .pos{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:13px;letter-spacing:.14em;color:var(--muted)}
-.pod.p1 .pos{color:var(--red)}
+.pod.p1 .pos{color:#17161A;opacity:.72}
 .pod .nm{font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:26px;line-height:1.02;text-transform:uppercase;
   margin:2px 0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pod .ln{display:flex;justify-content:space-between;gap:10px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
@@ -313,7 +357,7 @@ body.art-on #backdrop{opacity:1}
 
 .soundbtn{
   appearance:none;cursor:pointer;touch-action:manipulation;
-  border:2px solid var(--hair);border-radius:999px;background:transparent;color:var(--muted);
+  border:2px solid var(--hair);border-radius:0;background:transparent;color:var(--muted);
   font-family:"Chivo",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
   padding:4px 11px;white-space:nowrap;
 }
@@ -578,3 +622,21 @@ tr.movedup{animation:movedup 1.2s ease-out}
   font-family:"Chivo",sans-serif;font-weight:700;font-size:clamp(11px,1.7vmin,16px);
   letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
 }
+
+
+/* ---------- comic lettering, last word ----------
+ * The components above each set their own face. This is the one class that
+ * overrides them, and it is deliberately last in the file so it wins without
+ * an !important or a specificity arms race.
+ */
+.letter,
+.joinh1.letter,
+.answer-shout.letter,
+:root[data-scene="comic"] .answer-shout.letter,
+.bignum.letter{
+  font-family:"Bangers","Big Shoulders Display",sans-serif;
+  font-weight:400;letter-spacing:.03em;
+}
+/* Bangers sets tight; give the big display lines room to breathe. */
+.joinh1.letter{line-height:.9}
+.bignum.letter{letter-spacing:.01em}

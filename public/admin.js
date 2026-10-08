@@ -149,7 +149,7 @@
         <div class="grow">
           <h3>${n ? `${n} ${n === 1 ? "player" : "players"} waiting` : "Nobody has joined yet"}</h3>
           <p class="cat" style="margin:4px 0 0">${stageLine()}</p>
-          <p class="meta" style="margin:4px 0 0">No clocks are running. Everyone gets their first word at the same instant when you start.${(board.stage || 1) > 1 ? " Points from the levels already played are still on the board." : ""}</p>
+          <p class="meta" style="margin:4px 0 0">Everyone gets their first word at the same instant.${(board.stage || 1) > 1 ? " Points so far are still on the board." : ""}</p>
         </div>
         <div class="seg" style="margin:0" role="group" aria-label="Countdown length">
           ${board.countdownChoices.map((ms) => `<button data-cd="${ms}" aria-pressed="${ms === board.countdownMs}" type="button">${countdownLabel(ms)}</button>`).join("")}
@@ -171,7 +171,7 @@
         <div class="grow burstwrap">
           ${window.ComicArt?.starburst({ spikes: 14, opacity: 0.14 }) || ""}
           <h3>Starting in <span class="mono-num" id="goCount">${Math.ceil((board.startsAt - now()) / 1000)}</span></h3>
-          <p class="meta" style="margin:4px 0 0">Every player sees the same countdown. First word lands for all of them together.</p>
+          <p class="meta" style="margin:4px 0 0">First word lands for everyone together.</p>
         </div>
       </div>`;
     }
@@ -183,8 +183,8 @@
         <h3>Running for <span class="mono-num" id="goElapsed">${fmt(now() - board.startsAt)}</span></h3>
         <p class="cat" style="margin:4px 0 0">${stageLine()}</p>
         <p class="meta" style="margin:4px 0 0">${still
-          ? `${still} ${still === 1 ? "player is" : "players are"} still going.`
-          : "Everyone has finished this level."} Moving up keeps every point on the board and nobody has to rejoin &mdash; they wait in the lobby for your next go.</p>
+          ? `${still} ${still === 1 ? "player" : "players"} still going.`
+          : "Everyone has finished."} Moving up keeps the board; nobody rejoins.</p>
       </div>
       <button class="btn" id="advanceBtn" type="button">${advanceLabel()}</button>
     </div>`;
@@ -196,7 +196,7 @@
     const pct = board.puzzleCount ? Math.round((shared / board.puzzleCount) * 100) : 0;
     return `<div class="settings">
       <h4>Level</h4>
-      <p class="meta" style="margin:0">Start on Level 1 and move up as people warm up. Nothing is ever removed from the word list &mdash; the level just decides which end of it a round draws on. Mid-session, use <b>${advanceLabel()}</b> on the strip above rather than these buttons: it carries the leaderboard over, where these redraw the level everyone is waiting on.</p>
+      <p class="meta" style="margin:0">Which end of the word list a round draws on. Mid-session use <b>${advanceLabel()}</b> above &mdash; it keeps the board; these redraw it.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Level">
         ${(board.levels || []).map((l) => `<button data-level="${l.id}" aria-pressed="${l.id === board.level}" type="button" ${board.phase === "running" ? "disabled" : ""}>${esc(l.label)}</button>`).join("")}
       </div>
@@ -206,22 +206,22 @@
       })()}</p>
 
       <h4 style="margin-top:14px">Questions per round</h4>
-      <p class="meta" style="margin:0">Each player gets their own draw from the pool of ${board.poolSize}, climbing the same difficulty curve on different words &mdash; so the person beside you is not on the same question.</p>
+      <p class="meta" style="margin:0">Each player draws their own words from the pool of ${board.poolSize}.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Questions per round">
         ${(board.countChoices || []).map((n) => `<button data-count="${n}" aria-pressed="${n === board.puzzleCount}" type="button" ${running ? "disabled" : ""}>${n}</button>`).join("")}
       </div>
       ${running
         ? `<p class="meta" style="margin:10px 0 0">Locked while a round is under way &mdash; reset to change it.</p>`
-        : `<p class="meta" style="margin:10px 0 0">At ${board.puzzleCount} questions two players will have roughly <b>${shared} words in common</b> (${pct}% of the round), because some tiers are shallow. Shorter rounds overlap less; adding words to the thin tiers below helps most.</p>`}
+        : `<p class="meta" style="margin:10px 0 0">Two players will share about <b>${shared} words</b> (${pct}%). Shorter rounds overlap less.</p>`}
       <h4 style="margin-top:14px">How much help</h4>
-      <p class="meta" style="margin:0">One setting for the lot. Players can always take as many letters as they like; this sets how many a word opens with and what another one costs.</p>
+      <p class="meta" style="margin:0">How many letters a word opens with, and what another one costs.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="How much help">
         ${(board.helpLevels || []).map((h) => `<button data-help="${esc(h.id)}" aria-pressed="${h.id === board.helpLevel}" type="button">${esc(h.label)}</button>`).join("")}
       </div>
       <p class="meta" style="margin:8px 0 0">${esc((board.helpLevels || []).find((h) => h.id === board.helpLevel)?.blurb || "")} A <b>Bigger hint</b> is always free: it gives the first and last letter, the vowel count, and whether a letter repeats.</p>
 
       <h4 style="margin-top:14px">Skips per player</h4>
-      <p class="meta" style="margin:0">A skip gives a word up for lost. It counts as missed, so it costs a solve &mdash; which outranks any time saved. Buying a letter is unlimited instead, and costs <b>${Math.round((board.revealCostMs || 15000) / 1000)}s</b> off that word's clock each time.</p>
+      <p class="meta" style="margin:0">A skip counts as missed. Buying letters is unlimited, at <b>${Math.round((board.revealCostMs || 15000) / 1000)}s</b> each.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Skips per player">
         ${(board.skipChoices || []).map((n) => `<button data-skips="${n}" aria-pressed="${n === board.skipsAllowed}" type="button">${n === 0 ? "None" : n}</button>`).join("")}
       </div>
@@ -234,7 +234,7 @@
   function settingsMarkup() {
     return `<div class="settings">
       <h4>Time limit per word</h4>
-      <p class="meta" style="margin:0">Applies to everyone straight away. Run out on a word and it counts as missed — the full limit lands on that player's clock and they move on.</p>
+      <p class="meta" style="margin:0">Applies straight away. Running out counts as missed.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Time limit per word">
         ${LIMITS.map((ms) => `<button data-limit="${ms}" aria-pressed="${ms === board.limitMs}" type="button">${limitLabel(ms)}</button>`).join("")}
       </div>
@@ -251,7 +251,7 @@
       </span>`).join("")}</div>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost sm" id="clearRemoved" type="button">Clear the list</button>
-        <span class="meta">They see a "removed by the host" screen and stop scoring. A removal lasts the rest of the round; a reset clears the list entirely.</span>
+        <span class="meta">A removal lasts the rest of the round.</span>
       </div>
     </div>`;
   }
@@ -260,7 +260,7 @@
     return `<div class="hostbar">
       <button class="btn ghost sm" id="resetBtn" type="button">Reset and kick everyone</button>
       <button class="btn ghost sm" id="signOut" type="button">Sign out</button>
-      <span class="meta">Clears the board, the removed list and everyone's session &mdash; they each have to join again from scratch. Tap twice to confirm. You do not need this to change level: <b>${advanceLabel()}</b> on the strip above keeps everyone and their points.</span>
+      <span class="meta">Wipes the board and signs everyone out. To change level use <b>${advanceLabel()}</b> above instead.</span>
       <p class="meta" id="hostMsg"></p>
     </div>`;
   }
@@ -494,7 +494,7 @@
             <h4>${joined.length ? `${joined.length} ${joined.length === 1 ? "player in" : "players in"}` : "Waiting for the first player"}</h4>
             ${joined.length
               ? `<div class="chips">${joined.map((p) => `<span class="chip ${p.online ? "" : "off"}"><span>${esc(p.name)}</span></span>`).join("")}</div>
-                 <p class="meta" style="margin:12px 0 0">Flip to the leaderboard when everyone's in. Nothing starts or stops — each person's clock runs from the moment they join.</p>`
+                 <p class="meta" style="margin:12px 0 0">Flip to the leaderboard when everyone's in.</p>`
               : `<p class="meta" style="margin:0">Names appear here as people scan and start their run.</p>`}
           </div>
         </div>
@@ -588,8 +588,9 @@
         ${settingsMarkup()}
         ${blockedMarkup()}
         ${hostbarMarkup()}
-        <div class="notice">Ranking: <b>points</b>, then fastest time, then fewest guesses &mdash; all of it added up across every level this session has played, so moving up a level builds on the board rather than restarting it. A solved word is worth ${(board.scoring || {}).solved || 100}, plus ${(board.scoring || {}).perSpareGuess || 10} for each guess you did not need. A letter you chose to take costs ${(board.scoring || {}).perLetter || 15} and a bigger hint ${(board.scoring || {}).perHint || 10} &mdash; the letters the level hands out are free. A solve never drops below ${(board.scoring || {}).floor || 10}, so it always beats a miss. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.
-        <span style="opacity:.55">Running build <b>${esc((board.build && board.build.sha) || "dev")}</b>, made ${esc((board.build && board.build.at) || "?")}. If that is not your latest commit, rebuild: <code>./scripts/local.sh</code></span></div>
+        <div class="notice">Points, then fastest time, then fewest guesses &mdash; added up across every level this session.
+        A solve is ${(board.scoring || {}).solved || 100} plus ${(board.scoring || {}).perSpareGuess || 10} a spare guess; a letter you chose costs ${(board.scoring || {}).perLetter || 15} and a bigger hint ${(board.scoring || {}).perHint || 10}. <b>F</b> strips this back to the board alone.
+        Running build <b>${esc((board.build && board.build.sha) || "dev")}</b>, made ${esc((board.build && board.build.at) || "?")}. If that is not your latest commit, rebuild: <code>./scripts/local.sh</code></span></div>
       </div>`;
     const fb = $("focusBtn");
     if (fb) fb.onclick = () => setFocus(true);
@@ -713,7 +714,7 @@
         </div>
         <div class="hr"></div>
         <h4 style="font-size:17px;letter-spacing:.09em">Adding your own</h4>
-        <p class="meta" style="margin:8px 0 0">Drop a JSON file into the data volume at <code>themes/</code> and it appears here on the next visit to this tab &mdash; no rebuild. It takes an <code>id</code>, a <code>name</code>, a <code>scene</code> (<code>comic</code> or <code>cosmic</code>), a <code>wordmark</code>, an optional <code>intro</code>, and a <code>palette</code> of hex colours. A <code>backdropImage</code> naming a file you put in <code>assets/</code> is layered behind the scene.</p>
+        <p class="meta" style="margin:8px 0 0">Drop a JSON file in the data volume at <code>themes/</code> and it shows up here &mdash; no rebuild. A <code>backdropImage</code> naming a file in <code>assets/</code> is layered behind the scene.</p>
         <p class="meta" style="margin:8px 0 0">The shipped scenes are original drawings, not anyone's footage. If you add artwork of your own, what you are entitled to use is your call.</p>
         <p class="meta" id="themeMsg" style="margin:12px 0 0"></p>
       </div>`;

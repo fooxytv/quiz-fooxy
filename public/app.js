@@ -177,13 +177,9 @@
           <b>The host reset the quiz.</b> Everyone is out and the board is clear. Join again below when you're ready for the next run.
         </div>` : ""}
         <div class="panel panel-pad halftone">
-          <h1 class="joinh1" style="font-size:40px;line-height:.92;margin-bottom:8px">${state.puzzleCount} Marvel words.<br>Six guesses each.</h1>
-          <p class="meta" style="margin:0 0 6px">Wordle rules, Marvel answers, 4 to 8 letters. Every word comes with a clue, so you don't need to have seen all thirty-odd films.</p>
-          <p class="meta" style="margin:0 0 18px"><b>You're racing the clock.</b> Most words solved wins; if that ties, the fastest total time takes it.
-          ${limit ? `Each word is capped at <b>${Math.round(limit / 1000)} seconds</b> — run out and that one is gone.` : "There's no cap per word, so take your time."}
-          Everyone starts together: you'll wait in the lobby until the host counts you in.</p>
-          <div class="hr"></div>
-          <label class="fieldlabel" for="nameInput">What should the scoreboard call you?</label>
+          <h1 class="joinh1 letter" style="font-size:clamp(30px,9vw,40px);margin-bottom:12px">${state.puzzleCount} Marvel words.<br>Six guesses each.</h1>
+          <p class="caption">Wordle rules &middot; every word has a clue${limit ? ` &middot; ${Math.round(limit / 1000)}s each` : ""} &middot; fastest breaks a tie</p>
+          <label class="fieldlabel" for="nameInput">Your name for the scoreboard</label>
           <input type="text" id="nameInput" maxlength="28" autocomplete="nickname" spellcheck="false" placeholder="Your name or callsign" value="${esc(store(LS_NAME) || "")}">
           <div class="row"><button class="btn" id="joinBtn" type="button">Join the lobby</button></div>
           <p class="toast" id="toast"></p>
@@ -215,18 +211,18 @@
         <div class="panel panel-pad halftone lobbyart" style="text-align:center">
           <div class="emblem-big">${window.ComicArt?.emblem(64) || ""}</div>
           <div class="lobbydots"><i></i><i></i><i></i></div>
-          <h1 class="joinh1" style="font-size:38px;line-height:.95;margin:14px 0 8px">${(state.stage || 1) > 1 ? `Level up, ${esc(state.name)}` : `You're in, ${esc(state.name)}`}</h1>
+          <h1 class="joinh1 letter" style="font-size:clamp(28px,8.5vw,38px);margin:14px 0 8px">${(state.stage || 1) > 1 ? `Level up, ${esc(state.name)}` : `You're in, ${esc(state.name)}`}</h1>
           ${state.levelName ? `<p class="cat" style="margin:0 0 4px">${esc(state.levelLabel || `Level ${state.level}`)} &middot; ${esc(state.levelName)}</p>` : ""}
-          <p class="meta" style="margin:0 auto;max-width:34em">${(state.stage || 1) > 1
-            ? `You keep the <b>${state.overall ? state.overall.score : 0} points</b> you have already banked &mdash; this level adds to them. Waiting for the host to start it.`
-            : "Waiting for the host to start. Nobody's clock is running yet &mdash; the first word appears for everyone at the same moment."}</p>
+          <p class="caption" style="display:inline-block">${(state.stage || 1) > 1
+            ? `${state.overall ? state.overall.score : 0} points banked &mdash; this level adds to them`
+            : "Waiting for the host &middot; no clock is running yet"}</p>
           <div class="hr"></div>
           <div class="statrow" style="justify-content:center">
             <div class="stat"><b class="mono-num">${state.puzzleCount}</b><span>Words</span></div>
             <div class="stat"><b class="mono-num">${state.maxTries}</b><span>Guesses each</span></div>
             <div class="stat"><b class="mono-num">${limit ? Math.round(limit / 1000) + "s" : "&infin;"}</b><span>Per word</span></div>
           </div>
-          <p class="meta" style="margin:16px auto 0;max-width:34em">Green means right letter, right spot. Amber means right letter, wrong spot. Keep this tab open.</p>
+          <p class="meta" style="margin:16px auto 0;max-width:34em">Green: right letter, right spot. Amber: right letter, wrong spot.</p>
         </div>
       </div>`;
   }
@@ -241,7 +237,7 @@
           <div class="cat" style="color:var(--red)">Get ready</div>
           <div class="burstwrap">
             ${window.ComicArt?.starburst({ spikes: 18, opacity: 0.2 }) || ""}
-            <div class="bignum" id="bignum">${secs}</div>
+            <div class="bignum letter" id="bignum">${secs}</div>
           </div>
           <p class="meta" style="margin:0">First word in a moment. Six guesses, ${state.limitMs ? Math.round(state.limitMs / 1000) + " seconds" : "no limit"} on each.</p>
         </div>
@@ -282,11 +278,7 @@
           <p class="toast" id="toast"></p>
           ${closed ? outcome() : keyboard() + lifelines()}
         </div>
-        <p class="meta" style="margin-top:12px">
-          Green = right letter, right spot. Amber = right letter, wrong spot.
-          A letter you have landed green stays where it is on your next guess, so you only ever type the blanks.
-          <b>The clock is running.</b> If several people solve the same number of words, the fastest wins.
-        </p>
+        <p class="meta" style="margin-top:12px">Greens stay put on your next guess &mdash; you only type the blanks.</p>
       </div>`;
     if (closed && c.index !== lastOutcome) {
       lastOutcome = c.index;
@@ -465,9 +457,7 @@
       ${allowed > 0 ? `<button class="btn ghost sm" id="skipBtn" type="button" ${left > 0 ? "" : "disabled"}>
         Skip it <span class="cost">${left} left</span>
       </button>` : ""}
-      <p class="meta" style="flex:1 1 100%;margin:2px 0 0">
-        Take as many letters as you like${cost > 0 ? `, ${cost} seconds off this word's clock each` : " &mdash; they are free this round"}. Skipping gives the word up: it counts as missed, and solved words outrank time.
-      </p>
+      <p class="meta" style="flex:1 1 100%;margin:2px 0 0">A skip counts as missed.</p>
     </div>`;
   }
 
@@ -500,7 +490,7 @@
         ${won ? `Solved in ${c.tries} ${c.tries === 1 ? "guess" : "guesses"} &middot; ${fmt(c.ms)}`
               : c.skipped ? "Skipped" : c.timedOut ? "Time ran out" : "Out of guesses"}
       </div>
-      <div class="answer-shout">${esc(c.answer || "")}</div>
+      <div class="answer-shout letter">${esc(c.answer || "")}</div>
       ${c.fact ? `<div class="fact">${esc(c.fact)}</div>` : ""}
       <div class="row">
         <button class="btn" id="nextBtn" type="button">${state.done ? "See my results" : "Go now"}</button>
@@ -518,7 +508,7 @@
       <div class="wrap-narrow">
         <div class="panel panel-pad halftone">
           <div class="cat">${esc(state.levelLabel || "Level")} complete</div>
-          <h1 class="joinh1" style="font-size:40px;line-height:.92;margin:4px 0 12px">${state.solved} of ${state.puzzleCount} cracked</h1>
+          <h1 class="joinh1 letter" style="font-size:clamp(30px,9vw,42px);margin:4px 0 12px">${state.solved} of ${state.puzzleCount} cracked</h1>
           <div class="statrow">
             <div class="stat"><b class="mono-num">${state.score ?? 0}</b><span>Points this level</span></div>
             <div class="stat"><b class="mono-num">${state.solved}/${state.puzzleCount}</b><span>Solved</span></div>
