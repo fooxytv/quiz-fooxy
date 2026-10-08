@@ -251,8 +251,6 @@
         try {
           await api("/api/admin/limit", { method: "POST", body: { limitMs: ms } });
           board.limitMs = ms;
-          const est = $("estimate");
-          if (est) est.innerHTML = estimate();
           hostMsg(ms ? `Time limit is now ${limitLabel(ms)} per word.` : "Time limit off.", "ok");
         }
         catch (e) { hostMsg(e.message, "err"); }
@@ -502,7 +500,7 @@
     view.innerHTML = `
       ${goStripMarkup()}
       <div class="board-head">
-        <h2>${list.length ? `${esc(nameOf(list[0]))} leads` : "Live standings"}</h2>
+        <h2>${list.length ? `${esc(list[0].name)} leads` : "Live standings"}</h2>
         <button class="btn ghost sm" id="bigQrBtn" type="button">Show QR</button>
         <button class="btn ghost sm" id="focusBtn" type="button">Focus</button>
         <span class="spacer"></span>
