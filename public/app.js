@@ -377,13 +377,15 @@
         if (done) {
           cls += " " + done.marks[k];
           ch = done.guess[k];
-        } else if (known.has(k)) {
-          /* Given letters show in place on every row still to come. */
-          cls += " hit given";
-          ch = known.get(k);
         } else if (isCur) {
-          const at = slots.indexOf(k);
-          if (at >= 0 && typed[at]) { cls += " filled pop"; ch = typed[at]; }
+          /* Given letters sit in the row being typed only, not on every row below. */
+          if (known.has(k)) {
+            cls += " hit given";
+            ch = known.get(k);
+          } else {
+            const at = slots.indexOf(k);
+            if (at >= 0 && typed[at]) { cls += " filled pop"; ch = typed[at]; }
+          }
         }
         cells += `<div class="${cls}">${ch}</div>`;
       }
