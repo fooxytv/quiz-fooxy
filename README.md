@@ -171,6 +171,47 @@ rather than wonder.
 ready for the next level (see *Climbing a level mid-session*). A **reset** also puts
 everybody back in the lobby, but clears the board and makes them join again.
 
+## Pictures for the words
+
+Solve a word and it can show you a picture of what it was. Drop image files into
+the data volume at `assets/words/`, named after the answer:
+
+```
+assets/words/GROOT.png
+assets/words/THANOS.jpg
+assets/words/wong.webp        # case does not matter
+```
+
+That is the whole setup — no rebuild, no edit to the word list. The folder is
+re-read every 30 seconds, so a file added mid-session appears on the next word.
+`.jpg`, `.png`, `.webp`, `.gif` and `.avif` are served; anything else is not.
+A puzzle can also name its own file with an `image` field, which wins over the
+folder.
+
+**A picture never reaches a player until their word is closed.** The filename is
+the answer, so sending it a moment early would hand the word over; it is gated
+beside `answer` and `fact`, and the open payload does not mention the word at
+all. There is a test for exactly this.
+
+What works: **4:3, around 600×450**, under ~150KB each. The frame crops to 4:3
+and caps at 240px wide, so detail below that is wasted and weight is paid for by
+every phone in the room. A face or a figure that reads small beats a busy scene.
+
+**On what you put in there:** nothing ships with the repo and nothing is fetched
+from anywhere — the files are yours, and what you are entitled to use is your
+call. The same goes for a theme's `backdropImage`.
+
+## Backdrops
+
+A theme can name a `backdropImage` from `assets/`, layered behind the drawn
+scene. Because it could be anything, the UI stops assuming: a scrim goes over
+the picture, and panels drop the glass treatment that suits a drawn scene but
+turns text to mush over a photograph. Tested against a deliberately garish
+backdrop; the clue and grid stay readable.
+
+Aim for **2560×1440 or larger**, landscape, under ~800KB, and dark or empty
+through the middle — the UI sits in the centre and the art reads around it.
+
 ## Themes
 
 The look is swappable from the host screen, live, without reloading anyone's page

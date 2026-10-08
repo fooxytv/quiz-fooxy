@@ -88,6 +88,7 @@
       const room = freeSlots().length;
       if (typed.length > room) typed = typed.slice(0, room);
     }
+    syncWakeLock();
     render();
   }
 
@@ -107,6 +108,40 @@
     lastTick = null;
     lastPhase = null;
     lastOutcome = -1;
+  }
+
+  /* ------------------------------------------------------------ wake lock --- */
+
+  /*
+   * A phone that auto-locks mid-word loses the word: the clock is the server's
+   * and keeps running, so an unlock a minute later lands on a word already
+   * timed out. Hold a screen wake lock for as long as a word is open.
+   *
+   * The lock is dropped by the browser whenever the tab is backgrounded, so it
+   * has to be taken again on the way back rather than assumed to still be held.
+   */
+  let wakeLock = null;
+  async function holdScreen(on) {
+    if (!("wakeLock" in navigator)) return;
+    if (!on) {
+      try { await wakeLock?.release(); } catch (e) { /* already gone */ }
+      wakeLock = null;
+      return;
+    }
+    if (wakeLock) return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } catch (e) {
+      /* Denied, unsupported, or the tab is not visible. Nothing to do: the
+         quiz plays fine without it, people just have to tap now and then. */
+    }
+  }
+  /** Awake exactly while there is a live word to type into. */
+  function syncWakeLock() {
+    const want = !!(state && !state.removed && !state.waiting && !state.counting
+      && state.current && state.current.status === "open");
+    holdScreen(want);
   }
 
   /* ---------------------------------------------------------------- clock --- */
@@ -389,8 +424,14 @@
     const known = knownAt();
     const given = givenAt();
     const slots = freeSlots();
+    /*
+     * Once the word is over the unplayed rows are just empty boxes, and on a
+     * phone they push the answer and its picture off the bottom of the screen.
+     * Collapse to what was actually played and give the reveal the room.
+     */
+    const rows = c.status === "open" ? state.maxTries : Math.max(1, c.rows.length);
     let html = "";
-    for (let row = 0; row < state.maxTries; row++) {
+    for (let row = 0; row < rows; row++) {
       const done = c.rows[row];
       const isCur = !done && row === c.rows.length && c.status === "open";
       let cells = "";
@@ -491,6 +532,7 @@
               : c.skipped ? "Skipped" : c.timedOut ? "Time ran out" : "Out of guesses"}
       </div>
       <div class="answer-shout letter">${esc(c.answer || "")}</div>
+      ${c.image ? `<div class="shot"><img src="${esc(c.image)}" alt="" loading="eager"></div>` : ""}
       ${c.fact ? `<div class="fact">${esc(c.fact)}</div>` : ""}
       <div class="row">
         <button class="btn" id="nextBtn" type="button">${state.done ? "See my results" : "Go now"}</button>
@@ -678,7 +720,11 @@
     }
   }
 
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    syncWakeLock();   // the browser released it on the way out
+    refresh();
+  });
   window.addEventListener("focus", refresh);
 
   /* ------------------------------------------------------------- websocket --- */

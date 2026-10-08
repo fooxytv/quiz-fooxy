@@ -374,6 +374,10 @@ for (const [what, needle] of [
   ["auto-advance is scheduled", "autoNextTimer = setTimeout(goNext"],
   ["the sound control is armed", "Sfx?.button("],
   ["the last word advances to the results by itself", "state.done) {\n      finalSeen = true"],
+  ["the screen is held awake during a word", 'navigator.wakeLock.request("screen")'],
+  ["the wake lock is retaken when the tab comes back", "syncWakeLock();   // the browser released it"],
+  ["the picture is shown on the outcome panel", 'class="shot"'],
+  ["the grid collapses once the word is over", 'c.status === "open" ? state.maxTries'],
 ]) {
   check(what, appJs.includes(needle), needle);
 }
@@ -609,6 +613,64 @@ climbSt = (await call("/api/state")).data;
 check("a reset clears the banked points too",
   (climbSt.overall?.score ?? 0) === 0 && climbSt.stage === 1,
   `overall=${climbSt.overall?.score} stage=${climbSt.stage}`);
+await call("/api/admin/reset", "POST");
+as("me");
+
+// ---- pictures for solved words --------------------------------------------
+/* The filename IS the answer, so a picture leaking early hands the word over.
+   It has to be gated exactly like the answer and the trivia. */
+const originalWords = (await call("/api/admin/words")).data.puzzles;
+check("the word list can be read back", Array.isArray(originalWords) && originalWords.length > 0,
+  `${originalWords?.length} words`);
+
+/* Every puzzle, because the player's first word is drawn from their own
+   sequence -- picking one entry would usually not be the one they get. */
+r = await call("/api/admin/words", "PUT", {
+  puzzles: originalWords.map((p) => ({ ...p, image: `${p.answer}.png` })),
+});
+check("a puzzle may name its own picture", r.status === 200, `status=${r.status} ${r.data?.message || ""}`);
+
+await call("/api/admin/reset", "POST");
+await call("/api/admin/count", "POST", { count: 5 });
+as("me"); await call("/api/join", "POST", { name: "Looker" });
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+
+let shotSt = (await call("/api/state")).data;
+const shotAnswer = POOL.find((q) => q.hint === shotSt.current.hint).answer;
+check("no picture while the word is open", shotSt.current.image === null,
+  `image=${JSON.stringify(shotSt.current.image)}`);
+check("the open payload never mentions the answer at all",
+  !JSON.stringify(shotSt).toUpperCase().includes(shotAnswer), shotAnswer);
+shotSt = (await call("/api/guess", "POST", { guess: shotAnswer })).data;
+check("the picture arrives with the answer, once solved",
+  shotSt.current.status === "win" && typeof shotSt.current.image === "string"
+    && shotSt.current.image.startsWith("/assets/"),
+  `image=${JSON.stringify(shotSt.current.image)}`);
+
+/* Put the list back before anything else reads it. */
+await call("/api/admin/words", "PUT", { puzzles: originalWords });
+check("the word list is restored",
+  (await call("/api/admin/words")).data.puzzles.every((p) => !p.image));
+
+r = await fetch(BASE + "/assets/words/..%2f..%2fquiz.sqlite");
+check("the picture route refuses path traversal", r.status === 404, `status=${r.status}`);
+r = await fetch(BASE + "/assets/words/quiz.sqlite");
+check("the picture route serves images only", r.status === 404, `status=${r.status}`);
+
+// ---- two people with the same name ----------------------------------------
+/* Two indistinguishable rows is a leaderboard the host cannot act on. */
+await call("/api/admin/reset", "POST");
+as("me");    await call("/api/join", "POST", { name: "Dave" });
+as("other"); r = await call("/api/join", "POST", { name: "Dave" });
+check("the second Dave is given a distinct name", r.data.name === "Dave (2)", `name=${r.data.name}`);
+const daveNames = (await call("/api/admin/board")).data.players.map((p) => p.name).sort();
+check("the board shows two tellable-apart players",
+  daveNames.length === 2 && new Set(daveNames).size === 2, daveNames.join(", "));
+as("other");
+r = await call("/api/join", "POST", { name: "Dave" });
+check("rejoining keeps the name you were given, not another suffix",
+  r.data.name === "Dave (2)", `name=${r.data.name}`);
 await call("/api/admin/reset", "POST");
 as("me");
 

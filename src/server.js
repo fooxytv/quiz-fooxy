@@ -56,6 +56,46 @@ function nextLevelId(current) {
 }
 
 /*
+ * Pictures for the words, dropped into DATA_DIR/assets/words by the operator.
+ * Matched on the answer -- GROOT.jpg, groot.png, Groot.webp all work -- so a
+ * picture needs no edit to the word list. A puzzle may still name its own file
+ * explicitly, which wins.
+ *
+ * Re-read every 30 seconds rather than cached for the process lifetime, so a
+ * file dropped in mid-session shows up without a restart. Nothing here is ever
+ * sent to a player before their word closes.
+ */
+const WORD_IMAGE_DIR = "words";
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif)$/i;
+let imageMap = null;
+let imageMapAt = 0;
+
+function wordImages() {
+  const now = Date.now();
+  if (imageMap && now - imageMapAt < 30000) return imageMap;
+  const map = new Map();
+  try {
+    for (const f of fs.readdirSync(path.join(store.DATA_DIR, "assets", WORD_IMAGE_DIR))) {
+      if (!IMAGE_EXT.test(f)) continue;
+      map.set(f.replace(IMAGE_EXT, "").toUpperCase(), f);
+    }
+  } catch (e) {
+    /* no pictures folder; perfectly normal */
+  }
+  imageMap = map;
+  imageMapAt = now;
+  return map;
+}
+
+/** The picture for a solved word, as a URL, or null. */
+function imageFor(puzzle) {
+  if (!puzzle) return null;
+  if (puzzle.image) return `/assets/${encodeURIComponent(puzzle.image)}`;
+  const hit = wordImages().get(puzzle.answer);
+  return hit ? `/assets/${WORD_IMAGE_DIR}/${encodeURIComponent(hit)}` : null;
+}
+
+/*
  * The bigger hint. Built from the answer's shape rather than written prose, so it
  * exists for all 126 words, can never be factually wrong, and gives away only
  * what it says.
@@ -238,9 +278,11 @@ function playerState(player, round, pool) {
     rows: row ? JSON.parse(row.guesses).map((g) => ({ guess: g, marks: mark(g, puzzles[idx].answer) })) : [],
     startedAt: row ? row.started_at : null,
     ms: row ? rowMs(row, now, limitMs) : 0,
-    /* Only ever revealed once this puzzle is over. */
+    /* Only ever revealed once this puzzle is over. The picture goes with them:
+       its filename is the answer, so sending it early would hand the word over. */
     answer: closed ? puzzles[idx].answer : null,
     fact: closed ? puzzles[idx].fact : null,
+    image: closed ? imageFor(puzzles[idx]) : null,
   };
 
   /* In the lobby, or mid-countdown, the clue is not the player's to see yet. */
@@ -394,13 +436,34 @@ function buildBoard() {
 
 /* ------------------------------------------------------------- public API ---- */
 
+/*
+ * Two people called Dave are two indistinguishable rows on the leaderboard, and
+ * the host cannot tell which one to remove. The second one along becomes
+ * "Dave (2)". Case and spacing are ignored for the comparison, and a player
+ * rejoining under their own id keeps the name they already have.
+ */
+function uniqueName(name, roundId, pid) {
+  const taken = new Set(
+    store.roundPlayers(roundId)
+      .filter((p) => p.id !== pid)
+      .map((p) => p.name.toLowerCase())
+  );
+  if (!taken.has(name.toLowerCase())) return name;
+  for (let n = 2; n < 50; n++) {
+    const tryName = `${name} (${n})`.slice(0, 28);
+    if (!taken.has(tryName.toLowerCase())) return tryName;
+  }
+  return name;
+}
+
 app.post("/api/join", (req, res) => {
-  const name = cleanName(req.body?.name);
-  if (!name) return res.status(400).json({ error: "name_required", message: "Pick a name for the scoreboard." });
+  const asked = cleanName(req.body?.name);
+  if (!asked) return res.status(400).json({ error: "name_required", message: "Pick a name for the scoreboard." });
 
   const round = store.activeRound();
   const puzzles = store.loadPuzzles();
   const pid = readPid(req) || issuePid(res);
+  const name = uniqueName(asked, round.id, pid);
 
   if (store.isBlocked(pid)) {
     store.upsertPlayer({ id: pid, roundId: round.id, name });
@@ -905,6 +968,15 @@ app.post("/api/admin/logout", (req, res) => {
 });
 
 /* ---------------------------------------------------------------- pages ----- */
+
+/* The word pictures, one directory deep. Same rule: a name, never a path. */
+app.get("/assets/words/:file", (req, res) => {
+  const name = String(req.params.file || "").replace(/[^A-Za-z0-9._-]/g, "");
+  if (!name || name === "." || name === ".." || !IMAGE_EXT.test(name)) return res.status(404).end();
+  res.sendFile(path.join(store.DATA_DIR, "assets", WORD_IMAGE_DIR, name), { maxAge: "1h" }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
 
 /* Files the operator dropped in DATA_DIR/assets. Name only: no path traversal. */
 app.get("/assets/:file", (req, res) => {

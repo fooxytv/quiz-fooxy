@@ -203,12 +203,18 @@ export function validatePuzzles(list) {
     if (hint.toUpperCase().includes(answer)) {
       return [false, `Puzzle ${i + 1}: the clue gives the answer away.`];
     }
+    /* An optional picture, named only -- it is served from DATA_DIR/assets/words
+       and never reaches a player until their word is closed, because the
+       filename alone would give the answer away. Usually left out: the folder
+       is scanned by answer name, so dropping GROOT.jpg in is enough. */
+    const image = String(p.image || "").replace(/[^A-Za-z0-9._-]/g, "").slice(0, 80);
     out.push({
       answer,
       hint,
       tier: String(p.tier || "").toUpperCase().trim().slice(0, 10),
       category: String(p.category || "MARVEL").toUpperCase().trim().slice(0, 12),
       fact: String(p.fact || "").trim().slice(0, 140),
+      ...(image && image !== "." && image !== ".." ? { image } : {}),
     });
   }
   return [true, out];

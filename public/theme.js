@@ -61,11 +61,16 @@
     const make = window.Scenes?.[current.scene] || window.Scenes?.comic;
     if (make) stopScene = make(canvas);
     if (current.backdropImage) {
-      canvas.style.backgroundImage = `url("/assets/${encodeURIComponent(current.backdropImage)}")`;
+      /* The scrim rides in the same background shorthand, under the UI and over
+         the picture, because a canvas cannot carry a ::after to put it in. */
+      canvas.style.backgroundImage =
+        `linear-gradient(var(--scrim),var(--scrim)), url("/assets/${encodeURIComponent(current.backdropImage)}")`;
       canvas.classList.add("has-image");
+      document.documentElement.setAttribute("data-backdrop", "image");
     } else {
       canvas.style.backgroundImage = "";
       canvas.classList.remove("has-image");
+      document.documentElement.removeAttribute("data-backdrop");
     }
   }
 

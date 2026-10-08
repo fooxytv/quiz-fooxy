@@ -4,6 +4,8 @@
   --red:#C8102E; --gold:#D99A1F; --green:#1F7A4C; --azure:#2B3A8C;
   --tile-edge:#C6C5C0; --on-solid:#FFFFFF; --panel-shadow:#17161A;
   --dot:rgba(23,22,26,.13);
+  /* Laid over a photographic backdrop so the UI stays readable on top of it. */
+  --scrim:rgba(233,233,230,.80);
 }
 @media (prefers-color-scheme: dark){
   :root{
@@ -12,6 +14,7 @@
     --red:#FF4A52; --gold:#F2B544; --green:#35B37E; --azure:#8191FF;
     --tile-edge:#3A3A46; --on-solid:#0E0E12; --panel-shadow:#000000;
     --dot:rgba(237,234,227,.10);
+    --scrim:rgba(16,16,20,.76);
   }
 }
 *{box-sizing:border-box}
@@ -640,3 +643,35 @@ tr.movedup{animation:movedup 1.2s ease-out}
 /* Bangers sets tight; give the big display lines room to breathe. */
 .joinh1.letter{line-height:.9}
 .bignum.letter{letter-spacing:.01em}
+
+
+/* ---------- the picture for a solved word ----------
+ * A panel pasted into the page: hard ink edge, hard drop, slightly off square,
+ * slammed in on the beat the answer lands. The file is whatever the operator
+ * put in assets/words, so the frame crops it rather than trusting its shape.
+ */
+.shot{
+  margin:0 auto 10px;max-width:min(100%,240px);
+  border:3px solid var(--ink);box-shadow:5px 5px 0 var(--panel-shadow);
+  background:var(--sunk);overflow:hidden;line-height:0;
+  animation:slam .34s cubic-bezier(.2,1.5,.4,1) both;
+}
+.shot img{display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover}
+@keyframes slam{
+  from{transform:scale(1.3) rotate(-4deg);opacity:0}
+  to{transform:scale(1) rotate(-1.2deg);opacity:1}
+}
+
+/* ---------- a photographic backdrop ----------
+ * Whatever the operator dropped in: the UI cannot assume it is dark, quiet or
+ * cropped anywhere useful. A scrim goes over it, and panels drop the glass
+ * treatment that suits a drawn scene but turns text to mush over a photograph.
+ * This sits after the cosmic/hud glass rule deliberately -- equal specificity,
+ * so source order is what makes it win.
+ */
+#backdrop.has-image{background-size:cover;background-position:center;background-repeat:no-repeat}
+:root[data-backdrop="image"] :is(
+  .panel,.qrcard,.howto,.gostrip,.settings,.table-scroll,.pod){
+  background:var(--surface);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
