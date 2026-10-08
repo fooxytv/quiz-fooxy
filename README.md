@@ -47,6 +47,30 @@ and the Phase 4 names all stay; the level simply decides which tiers a round rea
 into. The level is lobby-only, since changing it mid-round would mean redrawing
 sequences people are partway through.
 
+### Climbing a level mid-session
+
+The usual way to run this is to open on Level 1 and move up as the team warms up,
+and the leaderboard has to survive that. **Move up to Level 2** on the host strip
+does it: each player's points, solves, time and guesses for the level just played
+are banked onto their row, the board for it clears, and the round drops back into
+the lobby at the next level. Nobody is kicked and nobody rejoins — they wait for
+the next **Start**.
+
+So the standings are cumulative across every level a session plays. The Points,
+Solved, Time and Guesses columns are session totals; the pips are the level in
+front of you, because they are that level's words. A word already served is
+excluded from later draws, which matters because neighbouring levels share a tier
+— without it, Level 2 would hand back an EASY word solved on Level 1.
+
+A **reset** is still the other thing entirely: it deletes every player, the banked
+totals with them, and sends everyone to the join screen. Use it between teams, not
+between levels.
+
+Anyone mid-word when the host moves up loses that word — it is banked exactly as
+the leaderboard was showing it, which means unscored. The button says how many
+people are still going before you confirm, so the natural moment is once the board
+reads *everyone has finished this level*.
+
 The easy end is deliberately all Infinity Saga — Iron Man through Endgame — and
 includes real surnames like Stark, Rogers, Banner, Parker, Barton and Romanoff,
 because those are satisfying to get.
@@ -143,7 +167,9 @@ From there it is a race at each person's own pace. Someone who joins after the g
 starts their own clock then and is flagged `late` on the board, so you can see it
 rather than wonder.
 
-A reset puts everybody back in the lobby, ready to run it again.
+**Moving up a level** puts everybody back in the lobby with their points intact,
+ready for the next level (see *Climbing a level mid-session*). A **reset** also puts
+everybody back in the lobby, but clears the board and makes them join again.
 
 ## Themes
 
@@ -589,6 +615,7 @@ Player endpoints carry an httpOnly cookie as identity. Everything under
 | `POST /api/admin/limit` | `{limitMs}` up to five minutes |
 | `POST /api/admin/skips` | `{skips}` 0&ndash;5 per player |
 | `POST /api/admin/help` | `{help}` `off` / `helpful` / `generous` |
+| `POST /api/admin/advance` | `{level}` (optional, defaults to one up) → bank the level, keep the players, back to the lobby |
 | `POST /api/admin/reset` | new round, board wiped |
 | `POST /api/admin/kick` / `unkick` | `{playerId}` |
 | `POST /api/admin/clear-removed` | empty the removed list without resetting |

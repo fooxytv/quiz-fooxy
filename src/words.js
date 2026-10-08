@@ -265,19 +265,34 @@ export function expectedOverlap(pool, count, levelId = 1) {
     .reduce((sum, t) => sum + (t.have ? (t.want * t.want) / t.have : 0), 0);
 }
 
-export function buildSequence(pool, count, rand = Math.random, levelId = 1) {
+/**
+ * `exclude` holds pool indices this player has already been served earlier in the
+ * session. Levels share tiers -- level 1 is WARM UP+EASY and level 2 is
+ * EASY+STEADY -- so without this, climbing a level hands back a word they just
+ * solved. Excluded words are not removed, only pushed to the back of their tier:
+ * a thin tier still fills the round rather than cutting it short.
+ */
+export function buildSequence(pool, count, rand = Math.random, levelId = 1, exclude = []) {
   const level = levelById(levelId);
   const targets = tierTargets(pool, count, levelId);
+  const used = exclude instanceof Set ? exclude : new Set(exclude);
 
-  const byTier = level.tiers.map((tier) => {
-    const idx = [];
-    pool.forEach((p, i) => { if ((p.tier || "").toUpperCase() === tier) idx.push(i); });
-    /* Fisher-Yates, so the words differ per player while the curve does not. */
+  /* Fisher-Yates, so the words differ per player while the curve does not. */
+  const shuffle = (idx) => {
     for (let i = idx.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
       [idx[i], idx[j]] = [idx[j], idx[i]];
     }
     return idx;
+  };
+
+  const byTier = level.tiers.map((tier) => {
+    const fresh = [], repeats = [];
+    pool.forEach((p, i) => {
+      if ((p.tier || "").toUpperCase() !== tier) return;
+      (used.has(i) ? repeats : fresh).push(i);
+    });
+    return [...shuffle(fresh), ...shuffle(repeats)];
   });
 
   const taken = byTier.map((idx, i) => idx.slice(0, targets[i].want));

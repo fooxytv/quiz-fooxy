@@ -512,6 +512,105 @@ check("the board reports points and ranks on them",
   (await call("/api/admin/board")).data.players[0].score === unaided);
 await call("/api/admin/help", "POST", { help: "helpful" });
 
+// ---- climbing a level without losing the board -----------------------------
+/* The point of /advance: a team works up from Level 1 and the standings follow
+   them. A reset is the only other way to change level, and it deletes everyone. */
+await call("/api/admin/reset", "POST");
+await call("/api/admin/count", "POST", { count: 5 });
+await call("/api/admin/level", "POST", { level: 1 });
+
+/** Solve every word of the level as whoever is current, returning their words. */
+async function playOut(n) {
+  const got = [];
+  for (let i = 0; i < n; i++) {
+    const now = (await call("/api/state")).data;
+    const puz = POOL.find((q) => q.hint === now.current.hint);
+    got.push(puz.answer);
+    await call("/api/guess", "POST", { guess: puz.answer });
+    if (i < n - 1) await call("/api/next", "POST");
+  }
+  return got;
+}
+const rowFor = (bd, name) => bd.players.find((x) => x.name === name);
+
+as("me");    await call("/api/join", "POST", { name: "Climber" });
+as("other"); await call("/api/join", "POST", { name: "Tagalong" });
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+
+as("me");
+const climbWords1 = await playOut(5);
+let climbBd = (await call("/api/admin/board")).data;
+const climb1 = rowFor(climbBd, "Climber");
+check("level 1 played out and scored", climb1.score > 0 && climb1.solved === 5,
+  `score=${climb1.score} solved=${climb1.solved}/${climb1.words}`);
+check("the board counts this level's words", climb1.words === 5, `words=${climb1.words}`);
+
+r = await call("/api/admin/advance", "POST", { level: 99 });
+check("advance refuses a level that does not exist", r.status === 400 && r.data.error === "bad_level",
+  `status=${r.status}`);
+
+r = await call("/api/admin/advance", "POST");
+check("advance with no level climbs by one", r.data.ok === true && r.data.level === 2, `level=${r.data.level}`);
+check("advance banks every player", r.data.banked === 2, `banked=${r.data.banked}`);
+check("advance counts who was still mid-word", r.data.unfinished === 1, `unfinished=${r.data.unfinished}`);
+
+climbBd = (await call("/api/admin/board")).data;
+check("nobody is kicked by advancing", climbBd.players.length === 2, `players=${climbBd.players.length}`);
+check("the round is back in the lobby", climbBd.phase === "lobby", `phase=${climbBd.phase}`);
+check("the session is on its second level", climbBd.stage === 2 && climbBd.level === 2,
+  `stage=${climbBd.stage} level=${climbBd.level}`);
+const climb2 = rowFor(climbBd, "Climber");
+check("points survive the climb", climb2.score === climb1.score, `${climb1.score} -> ${climb2.score}`);
+check("solves survive the climb", climb2.solved === 5, `solved=${climb2.solved}`);
+check("the new level's words join the denominator", climb2.words === 10, `words=${climb2.words}`);
+check("this level's own score starts again at zero", climb2.stageScore === 0, `stageScore=${climb2.stageScore}`);
+check("the pips are cleared for the new level", climb2.results.every((v) => v === 0), climb2.results.join(","));
+
+as("me");
+let climbSt = (await call("/api/state")).data;
+check("the player is waiting, not ejected", climbSt.joined === true && climbSt.waiting === true,
+  `joined=${climbSt.joined} waiting=${climbSt.waiting}`);
+check("the player keeps their banked points", climbSt.overall.score === climb1.score,
+  `overall=${climbSt.overall.score} banked=${climb1.score}`);
+check("the player's own level score is reset", climbSt.score === 0, `score=${climbSt.score}`);
+check("the player is told which level is coming",
+  climbSt.stage === 2 && climbSt.level === 2 && !!climbSt.levelName,
+  `stage=${climbSt.stage} level=${climbSt.level} name=${climbSt.levelName}`);
+
+r = await call("/api/admin/start", "POST", { countdownMs: 3000 });
+await sleep(Math.max(0, r.data.startsAt - Date.now()) + 250);
+as("me");
+const climbWords2 = await playOut(5);
+const tierOf = (w) => POOL.find((q) => q.answer === w).tier;
+check("level 2 draws on its own tiers",
+  climbWords2.every((w) => levelById(2).tiers.includes(tierOf(w))),
+  climbWords2.map(tierOf).join(", "));
+check("a climbed level never hands back a word already played",
+  climbWords2.every((w) => !climbWords1.includes(w)),
+  `level 1: ${climbWords1.join(",")} / level 2: ${climbWords2.join(",")}`);
+
+climbBd = (await call("/api/admin/board")).data;
+const climb3 = rowFor(climbBd, "Climber");
+check("points add up across both levels", climb3.score > climb1.score,
+  `${climb1.score} -> ${climb3.score}`);
+check("solves add up across both levels", climb3.solved === 10, `solved=${climb3.solved}/${climb3.words}`);
+check("this level alone is also reported",
+  climb3.stageScore > 0 && climb3.stageScore < climb3.score,
+  `thisLevel=${climb3.stageScore} total=${climb3.score}`);
+check("the player sees the same running total as the board",
+  (await call("/api/state")).data.overall.score === climb3.score);
+
+/* And a reset still means a reset: the banked totals go with the players. */
+await call("/api/admin/reset", "POST");
+as("me"); await call("/api/join", "POST", { name: "Climber" });
+climbSt = (await call("/api/state")).data;
+check("a reset clears the banked points too",
+  (climbSt.overall?.score ?? 0) === 0 && climbSt.stage === 1,
+  `overall=${climbSt.overall?.score} stage=${climbSt.stage}`);
+await call("/api/admin/reset", "POST");
+as("me");
+
 // ---- themes ---------------------------------------------------------------
 r = await call("/api/theme");
 check("active theme is public", r.status === 200 && !!r.data.theme && !!r.data.theme.id);

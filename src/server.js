@@ -45,6 +45,17 @@ function revealCost(round) {
 }
 
 /*
+ * Which level "Next level" moves to. The numbered levels climb; Mixed (id 0) has
+ * nowhere above it, and neither has Level 5, so both play another level at the
+ * same difficulty rather than refusing.
+ */
+function nextLevelId(current) {
+  const top = Math.max(...LEVELS.map((l) => l.id));
+  if (!current) return 0;
+  return Math.min(current + 1, top);
+}
+
+/*
  * The bigger hint. Built from the answer's shape rather than written prose, so it
  * exists for all 126 words, can never be factually wrong, and gives away only
  * what it says.
@@ -140,10 +151,39 @@ function playerPuzzles(player, round, pool) {
   try { seq = JSON.parse(player.sequence || "[]"); } catch (e) { seq = []; }
   seq = seq.filter((i) => Number.isInteger(i) && i >= 0 && i < pool.length);
   if (!seq.length) {
-    seq = buildSequence(pool, round.question_count, Math.random, round.level);
+    seq = buildSequence(pool, round.question_count, Math.random, round.level, store.seenWords(player));
     store.setPlayerSequence(player.id, seq);
   }
   return seq.map((i) => pool[i]);
+}
+
+/* ------------------------------------------------------------- stage tally ---- */
+
+/**
+ * One player's figures for the level being played right now. The board renders
+ * these and climbing a level banks exactly the same numbers, so the standings
+ * never jump at the moment of the change.
+ */
+function stageTally(player, count, now, limitMs) {
+  const rows = store.allRows(player.id);
+  let solved = 0, guesses = 0, ms = 0, score = 0, closed = 0;
+  const results = new Array(count).fill(0);
+  for (const r of rows) {
+    if (r.puzzle_idx >= count) continue;
+    results[r.puzzle_idx] = resultCode(r);
+    if (r.status === "win") solved++;
+    if (r.status !== "open") closed++;
+    guesses += r.tries;
+    ms += rowMs(r, now, limitMs);
+    score += scoreRow(r);
+  }
+  return {
+    rows, results, solved, guesses, ms, score, closed,
+    words: count,
+    skips: player.skips_used || 0,
+    reveals: player.reveals_used || 0,
+    hints: player.hints_used || 0,
+  };
 }
 
 /* ------------------------------------------------------------ player state ---- */
@@ -235,6 +275,22 @@ function playerState(player, round, pool) {
     skipsLeft: Math.max(0, round.skips_allowed - (player.skips_used || 0)),
     revealCostMs: revealCost(round),
     helpLevel: round.help_level,
+    /* renderLobby has always wanted these; until now nothing sent them. */
+    level: round.level,
+    levelName: levelById(round.level).name,
+    levelLabel: levelById(round.level).label,
+    /* Which level of the session this is, so the client can tell a new one from
+       a reload and stop holding on to the last one's results screen. */
+    stage: round.stage || 1,
+    /* Running totals across every level played, which is what the leaderboard
+       ranks on. The figures above stay per-level, for this level's recap. */
+    overall: {
+      score: (player.banked_score || 0) + score,
+      solved: (player.banked_solved || 0) + solved,
+      words: (player.banked_words || 0) + puzzles.length,
+      guesses: (player.banked_guesses || 0) + guesses,
+      ms: (player.banked_ms || 0) + totalMs,
+    },
     /* A reveal always leaves at least one letter unknown. */
     canReveal: !!(row && row.status === "open" && revealed.length < puzzles[idx].answer.length - 1),
     done,
@@ -261,32 +317,27 @@ function buildBoard() {
 
   const count = round.question_count;
   const entries = store.roundPlayers(round.id).map((p) => {
-    const rows = store.allRows(p.id);
-    let solved = 0, guesses = 0, totalMs = 0, closedCount = 0, score = 0;
-    const results = new Array(count).fill(0);
-    for (const r of rows) {
-      if (r.puzzle_idx >= count) continue;
-      results[r.puzzle_idx] = resultCode(r);
-      if (r.status === "win") solved++;
-      if (r.status !== "open") closedCount++;
-      guesses += r.tries;
-      totalMs += rowMs(r, now, round.limit_ms);
-      score += scoreRow(r);
-    }
-    const current = rows.find((r) => r.puzzle_idx === p.idx && r.status === "open") || null;
+    const t = stageTally(p, count, now, round.limit_ms);
+    const current = t.rows.find((r) => r.puzzle_idx === p.idx && r.status === "open") || null;
     return {
       id: p.id,
       name: p.name,
       idx: Math.min(p.idx, count - 1),
-      solved,
-      guesses,
-      totalMs,
-      score,
-      results,
-      skips: p.skips_used || 0,
-      reveals: p.reveals_used || 0,
-      hints: p.hints_used || 0,
-      done: closedCount >= count,
+      /* Points, time and solves run across every level played this session, so
+         climbing a level adds to the standings instead of restarting them. The
+         pips stay per-level, because they are this level's words. */
+      solved: (p.banked_solved || 0) + t.solved,
+      words: (p.banked_words || 0) + count,
+      guesses: (p.banked_guesses || 0) + t.guesses,
+      totalMs: (p.banked_ms || 0) + t.ms,
+      score: (p.banked_score || 0) + t.score,
+      stageScore: t.score,
+      stageSolved: t.solved,
+      results: t.results,
+      skips: (p.banked_skips || 0) + t.skips,
+      reveals: (p.banked_reveals || 0) + t.reveals,
+      hints: (p.banked_hints || 0) + t.hints,
+      done: t.closed >= count,
       curStartedAt: current ? current.started_at : null,
       online: now - p.last_seen < 45000,
       joinedAt: p.joined_at,
@@ -312,6 +363,10 @@ function buildBoard() {
     helpLevel: round.help_level,
     helpLevels: Object.entries(HELP_LEVELS).map(([id, h]) => ({ id, label: h.label, blurb: h.blurb, free: h.free })),
     level: round.level,
+    levelName: levelById(round.level).name,
+    stage: round.stage || 1,
+    /* The level the Next level button will move to, and whether that is a climb. */
+    nextLevel: nextLevelId(round.level),
     levels: LEVELS.map((l) => ({
       ...l,
       available: tierTargets(puzzles, round.question_count, l.id).reduce((a, t) => a + t.have, 0),
@@ -620,10 +675,57 @@ app.post("/api/admin/start", requireAdmin, (req, res) => {
   const ms = Number(req.body?.countdownMs);
   const countdownMs = COUNTDOWN_CHOICES.includes(ms) ? ms : round.countdown_ms;
   const pool = store.loadPuzzles();
-  const fresh = store.startRound(round.id, countdownMs, () => buildSequence(pool, round.question_count, Math.random, round.level));
+  /* Per player, so the draw can skip the words they had on earlier levels. */
+  const fresh = store.startRound(round.id, countdownMs,
+    (p) => buildSequence(pool, round.question_count, Math.random, round.level, store.seenWords(p)));
   broadcastRound();
   broadcastBoard();
   res.json({ ok: true, startsAt: fresh.starts_at, countdownMs });
+});
+
+/*
+ * Climb a level and keep the session. This is the one the host actually wants
+ * between levels: a reset deletes every player and the board with them, which
+ * meant a team working up from Level 1 lost the standings every time they moved.
+ *
+ * Whatever the board is showing is banked, the level's words are cleared, and
+ * everyone waits in the lobby for the next Go -- still joined, still ranked.
+ */
+app.post("/api/admin/advance", requireAdmin, (req, res) => {
+  const round = store.activeRound();
+  const asked = req.body?.level;
+  const level = asked === undefined || asked === null || asked === "" ? nextLevelId(round.level) : Number(asked);
+  if (!LEVELS.some((l) => l.id === level)) return res.status(400).json({ error: "bad_level" });
+
+  const now = Date.now();
+  const count = round.question_count;
+  if (round.phase === "running" && round.starts_at <= now) {
+    store.expireRound(round.id, round.limit_ms);
+  }
+
+  /* Bank the figures the leaderboard is showing right now, so nothing shifts
+     under the host as they press it. A word still open simply did not score --
+     the same as missing it, and the reason the button warns about stragglers. */
+  const players = store.roundPlayers(round.id);
+  const tallies = new Map();
+  let unfinished = 0;
+  for (const p of players) {
+    const t = stageTally(p, count, now, round.limit_ms);
+    if (t.closed < count) unfinished++;
+    tallies.set(p.id, t);
+  }
+
+  const fresh = store.advanceStage(round.id, level, tallies);
+  broadcastRound();
+  broadcastBoard();
+  res.json({
+    ok: true,
+    level,
+    levelName: levelById(level).name,
+    stage: fresh.stage,
+    banked: players.length,
+    unfinished,
+  });
 });
 
 app.post("/api/admin/count", requireAdmin, (req, res) => {

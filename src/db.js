@@ -67,7 +67,8 @@ db.exec(`
     question_count INTEGER NOT NULL DEFAULT 10,
     skips_allowed  INTEGER NOT NULL DEFAULT 3,
     help_level     TEXT NOT NULL DEFAULT 'helpful',
-    level          INTEGER NOT NULL DEFAULT 1
+    level          INTEGER NOT NULL DEFAULT 1,
+    stage          INTEGER NOT NULL DEFAULT 1
   );
   CREATE TABLE IF NOT EXISTS players (
     id        TEXT PRIMARY KEY,
@@ -80,7 +81,16 @@ db.exec(`
     sequence  TEXT,
     skips_used INTEGER NOT NULL DEFAULT 0,
     reveals_used INTEGER NOT NULL DEFAULT 0,
-    hints_used   INTEGER NOT NULL DEFAULT 0
+    hints_used   INTEGER NOT NULL DEFAULT 0,
+    banked_score   INTEGER NOT NULL DEFAULT 0,
+    banked_ms      INTEGER NOT NULL DEFAULT 0,
+    banked_solved  INTEGER NOT NULL DEFAULT 0,
+    banked_words   INTEGER NOT NULL DEFAULT 0,
+    banked_guesses INTEGER NOT NULL DEFAULT 0,
+    banked_skips   INTEGER NOT NULL DEFAULT 0,
+    banked_reveals INTEGER NOT NULL DEFAULT 0,
+    banked_hints   INTEGER NOT NULL DEFAULT 0,
+    seen_words     TEXT NOT NULL DEFAULT '[]'
   );
   CREATE INDEX IF NOT EXISTS players_round ON players(round_id);
   CREATE TABLE IF NOT EXISTS progress (
@@ -130,6 +140,12 @@ ensureColumn("rounds", "level", "level INTEGER NOT NULL DEFAULT 1");
 ensureColumn("players", "hints_used", "hints_used INTEGER NOT NULL DEFAULT 0");
 ensureColumn("progress", "big_hint", "big_hint INTEGER NOT NULL DEFAULT 0");
 ensureColumn("progress", "free_letters", "free_letters INTEGER NOT NULL DEFAULT 0");
+ensureColumn("rounds", "stage", "stage INTEGER NOT NULL DEFAULT 1");
+/* Tallies banked from levels already played, so climbing a level keeps the board. */
+for (const c of ["score", "ms", "solved", "words", "guesses", "skips", "reveals", "hints"]) {
+  ensureColumn("players", `banked_${c}`, `banked_${c} INTEGER NOT NULL DEFAULT 0`);
+}
+ensureColumn("players", "seen_words", "seen_words TEXT NOT NULL DEFAULT '[]'");
 
 /* ---------- word list ---------- */
 
@@ -249,6 +265,69 @@ export function setRoundLevel(roundId, level) {
   });
 }
 
+/**
+ * Climb a level without losing the session. Each player's tally for the level
+ * just played is banked onto their row, their board for it is cleared, and the
+ * round returns to the lobby at the new level -- so the host presses Go again
+ * and nobody has to rejoin. The opposite of a reset, which deletes the players.
+ *
+ * `tallies` comes from the caller because scoring lives in game.js; it is keyed
+ * by player id and holds exactly what the leaderboard was showing, so the
+ * standings do not jump at the moment of the change.
+ */
+export function advanceStage(roundId, level, tallies) {
+  return tx(() => {
+    const players = db.prepare("SELECT * FROM players WHERE round_id = ?").all(roundId);
+    const bank = db.prepare(`
+      UPDATE players
+         SET banked_score   = banked_score   + ?,
+             banked_ms      = banked_ms      + ?,
+             banked_solved  = banked_solved  + ?,
+             banked_words   = banked_words   + ?,
+             banked_guesses = banked_guesses + ?,
+             banked_skips   = banked_skips   + ?,
+             banked_reveals = banked_reveals + ?,
+             banked_hints   = banked_hints   + ?,
+             seen_words = ?,
+             sequence = NULL, idx = 0,
+             skips_used = 0, reveals_used = 0, hints_used = 0
+       WHERE id = ?
+    `);
+    const served = db.prepare("SELECT puzzle_idx FROM progress WHERE player_id = ?");
+    for (const p of players) {
+      const t = tallies.get(p.id) || {};
+      /* Words already served stay excluded for the rest of the session, so a
+         level sharing a tier with the last one does not hand them back. Only
+         words they actually reached: burning the tail of a sequence nobody got
+         to would thin the pool for no reason. */
+      let seen = [];
+      try { seen = JSON.parse(p.seen_words || "[]"); } catch (e) { seen = []; }
+      let seq = [];
+      try { seq = JSON.parse(p.sequence || "[]"); } catch (e) { seq = []; }
+      const hit = served.all(p.id).map((r) => seq[r.puzzle_idx]);
+      const merged = [...new Set([...seen, ...hit].filter((i) => Number.isInteger(i)))];
+      bank.run(
+        t.score || 0, t.ms || 0, t.solved || 0, t.words || 0, t.guesses || 0,
+        t.skips || 0, t.reveals || 0, t.hints || 0,
+        JSON.stringify(merged), p.id
+      );
+    }
+    db.prepare("DELETE FROM progress WHERE player_id IN (SELECT id FROM players WHERE round_id = ?)").run(roundId);
+    db.prepare("UPDATE rounds SET level = ?, stage = stage + 1, phase = 'lobby', starts_at = NULL WHERE id = ?")
+      .run(level, roundId);
+    return db.prepare("SELECT * FROM rounds WHERE id = ?").get(roundId);
+  });
+}
+
+/** Pool indices this player has already been served this session. */
+export function seenWords(player) {
+  if (!player) return [];
+  try {
+    const seen = JSON.parse(player.seen_words || "[]");
+    return Array.isArray(seen) ? seen.filter((i) => Number.isInteger(i)) : [];
+  } catch (e) { return []; }
+}
+
 export function setRoundHelp(roundId, level) {
   db.prepare("UPDATE rounds SET help_level = ? WHERE id = ?").run(level, roundId);
 }
@@ -282,14 +361,14 @@ export function startRound(roundId, countdownMs, drawSequence) {
   tx(() => {
     db.prepare("UPDATE rounds SET phase = 'running', starts_at = ?, countdown_ms = ? WHERE id = ?")
       .run(startsAt, countdownMs, roundId);
-    const waiting = db.prepare("SELECT id, sequence FROM players WHERE round_id = ? AND blocked = 0").all(roundId);
+    const waiting = db.prepare("SELECT * FROM players WHERE round_id = ? AND blocked = 0").all(roundId);
     const seqStmt = db.prepare("UPDATE players SET sequence = ? WHERE id = ?");
     const ins = db.prepare(
       "INSERT OR REPLACE INTO progress (player_id, puzzle_idx, status, started_at) VALUES (?, 0, 'open', ?)"
     );
     for (const p of waiting) {
       /* Each player gets their own draw, so neighbours cannot copy. */
-      if (!p.sequence && drawSequence) seqStmt.run(JSON.stringify(drawSequence()), p.id);
+      if (!p.sequence && drawSequence) seqStmt.run(JSON.stringify(drawSequence(p)), p.id);
       ins.run(p.id, startsAt);
     }
   });
@@ -311,8 +390,16 @@ export function upsertPlayer({ id, roundId, name }) {
     if (existing.round_id !== roundId) {
       tx(() => {
         db.prepare("DELETE FROM progress WHERE player_id = ?").run(id);
-        db.prepare("UPDATE players SET round_id = ?, idx = 0, sequence = NULL, skips_used = 0, reveals_used = 0, hints_used = 0, name = ?, last_seen = ? WHERE id = ?")
-          .run(roundId, name || existing.name, now, id);
+        db.prepare(`
+          UPDATE players
+             SET round_id = ?, idx = 0, sequence = NULL,
+                 skips_used = 0, reveals_used = 0, hints_used = 0,
+                 banked_score = 0, banked_ms = 0, banked_solved = 0, banked_words = 0,
+                 banked_guesses = 0, banked_skips = 0, banked_reveals = 0, banked_hints = 0,
+                 seen_words = '[]',
+                 name = ?, last_seen = ?
+           WHERE id = ?
+        `).run(roundId, name || existing.name, now, id);
       });
     } else if (name && name !== existing.name) {
       db.prepare("UPDATE players SET name = ?, last_seen = ? WHERE id = ?").run(name, now, id);

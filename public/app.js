@@ -27,6 +27,7 @@
   let autoNextFor = -1;    // index already queued to advance, so it fires once
   let autoNextTimer = 0;
   let finalSeen = false;   // the last word's answer has had its moment on screen
+  let stageSeen = null;    // which level of the session this page is showing
 
   const $ = (id) => document.getElementById(id);
   const view = $("view");
@@ -69,6 +70,17 @@
     if (!payload) return;
     if (typeof payload.serverNow === "number") clockSkew = payload.serverNow - Date.now();
     if (payload.joined !== false) hadJoined = true;
+    /* The host moved everyone up a level. Without this the results screen from
+       the level just played stays latched, and the new level's last word gets
+       skipped straight past its answer. */
+    if (typeof payload.stage === "number" && stageSeen !== null && payload.stage !== stageSeen) {
+      clearTimeout(autoNextTimer);
+      autoNextFor = -1;
+      finalSeen = false;
+      typed = "";
+      lastOutcome = -1;
+    }
+    if (typeof payload.stage === "number") stageSeen = payload.stage;
     state = payload;
     /* Taking a letter shrinks the number of blanks, so trim anything already
        typed past the new count -- otherwise the row is full and unsubmittable. */
@@ -88,6 +100,7 @@
     clearTimeout(autoNextTimer);
     autoNextFor = -1;
     finalSeen = false;
+    stageSeen = null;
     hadJoined = false;
     wasEjected = true;
     typed = "";
@@ -202,9 +215,11 @@
         <div class="panel panel-pad halftone lobbyart" style="text-align:center">
           <div class="emblem-big">${window.ComicArt?.emblem(64) || ""}</div>
           <div class="lobbydots"><i></i><i></i><i></i></div>
-          <h1 class="joinh1" style="font-size:38px;line-height:.95;margin:14px 0 8px">You're in, ${esc(state.name)}</h1>
-          ${state.levelName ? `<p class="cat" style="margin:0 0 4px">Level ${state.level} &middot; ${esc(state.levelName)}</p>` : ""}
-          <p class="meta" style="margin:0 auto;max-width:34em">Waiting for the host to start. Nobody's clock is running yet &mdash; the first word appears for everyone at the same moment.</p>
+          <h1 class="joinh1" style="font-size:38px;line-height:.95;margin:14px 0 8px">${(state.stage || 1) > 1 ? `Level up, ${esc(state.name)}` : `You're in, ${esc(state.name)}`}</h1>
+          ${state.levelName ? `<p class="cat" style="margin:0 0 4px">${esc(state.levelLabel || `Level ${state.level}`)} &middot; ${esc(state.levelName)}</p>` : ""}
+          <p class="meta" style="margin:0 auto;max-width:34em">${(state.stage || 1) > 1
+            ? `You keep the <b>${state.overall ? state.overall.score : 0} points</b> you have already banked &mdash; this level adds to them. Waiting for the host to start it.`
+            : "Waiting for the host to start. Nobody's clock is running yet &mdash; the first word appears for everyone at the same moment."}</p>
           <div class="hr"></div>
           <div class="statrow" style="justify-content:center">
             <div class="stat"><b class="mono-num">${state.puzzleCount}</b><span>Words</span></div>
@@ -485,14 +500,21 @@
     view.innerHTML = `
       <div class="wrap-narrow">
         <div class="panel panel-pad halftone">
-          <div class="cat">Run complete</div>
+          <div class="cat">${esc(state.levelLabel || "Level")} complete</div>
           <h1 class="joinh1" style="font-size:40px;line-height:.92;margin:4px 0 12px">${state.solved} of ${state.puzzleCount} cracked</h1>
           <div class="statrow">
-            <div class="stat"><b class="mono-num">${state.score ?? 0}</b><span>Points</span></div>
+            <div class="stat"><b class="mono-num">${state.score ?? 0}</b><span>Points this level</span></div>
             <div class="stat"><b class="mono-num">${state.solved}/${state.puzzleCount}</b><span>Solved</span></div>
-            <div class="stat"><b class="mono-num">${fmt(state.totalMs)}</b><span>Total time</span></div>
+            <div class="stat"><b class="mono-num">${fmt(state.totalMs)}</b><span>Time this level</span></div>
             <div class="stat"><b class="mono-num">${state.guesses}</b><span>Guesses used</span></div>
           </div>
+          ${(state.stage || 1) > 1 && state.overall ? `<div class="hr"></div>
+          <div class="cat">Session so far &middot; ${state.stage} levels</div>
+          <div class="statrow">
+            <div class="stat"><b class="mono-num">${state.overall.score}</b><span>Points total</span></div>
+            <div class="stat"><b class="mono-num">${state.overall.solved}/${state.overall.words}</b><span>Solved total</span></div>
+            <div class="stat"><b class="mono-num">${fmt(state.overall.ms)}</b><span>Time total</span></div>
+          </div>` : ""}
           <div class="recap">
             ${state.results.map((v, i) => `<div class="recap-card ${v > 0 ? "ok" : "no"}">
               <div class="w">#${i + 1}</div>
@@ -500,7 +522,7 @@
             </div>`).join("")}
           </div>
           <div class="hr"></div>
-          <p class="meta" style="margin:0">That's your run in. Standings are on the host's screen.</p>
+          <p class="meta" style="margin:0">That's this level in. Standings are on the host's screen &mdash; keep this tab open: if the host moves everyone up a level, your points carry over and the next one starts here.</p>
       <p class="meta" style="margin:8px 0 0;opacity:.6;font-size:11px">build ${esc((state.build && state.build.sha) || "dev")}</p>
         </div>
       </div>`;

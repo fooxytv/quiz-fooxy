@@ -120,6 +120,23 @@
 
   function countdownLabel(ms) { return ms >= 60000 ? Math.round(ms / 60000) + " min" : Math.round(ms / 1000) + "s"; }
 
+  function levelOf(id) {
+    return (board.levels || []).find((l) => l.id === id) || null;
+  }
+
+  /* Where this session has got to, once it is past the first level. */
+  function stageLine() {
+    const l = levelOf(board.level);
+    const stage = board.stage || 1;
+    return `${l ? l.label : "Level"}${l ? ` &middot; ${esc(l.name)}` : ""}${stage > 1 ? ` &middot; level ${stage} of the session` : ""}`;
+  }
+
+  function advanceLabel() {
+    const climbing = board.nextLevel !== board.level;
+    const nx = levelOf(board.nextLevel);
+    return climbing ? `Move up to ${nx ? esc(nx.label) : "the next level"}` : "Play another level";
+  }
+
   function goStripMarkup() {
     const inLobby = board.phase !== "running";
     const counting = !inLobby && board.startsAt > now();
@@ -131,7 +148,8 @@
         <span class="gobadge">${window.ComicArt?.emblem(40) || ""}</span>
         <div class="grow">
           <h3>${n ? `${n} ${n === 1 ? "player" : "players"} waiting` : "Nobody has joined yet"}</h3>
-          <p class="meta" style="margin:4px 0 0">No clocks are running. Everyone gets their first word at the same instant when you start.</p>
+          <p class="cat" style="margin:4px 0 0">${stageLine()}</p>
+          <p class="meta" style="margin:4px 0 0">No clocks are running. Everyone gets their first word at the same instant when you start.${(board.stage || 1) > 1 ? " Points from the levels already played are still on the board." : ""}</p>
         </div>
         <div class="seg" style="margin:0" role="group" aria-label="Countdown length">
           ${board.countdownChoices.map((ms) => `<button data-cd="${ms}" aria-pressed="${ms === board.countdownMs}" type="button">${countdownLabel(ms)}</button>`).join("")}
@@ -158,12 +176,17 @@
       </div>`;
     }
 
+    const still = board.players.filter((p) => !p.done).length;
     return `<div class="gostrip">
       <span class="phasepill running">Under way</span>
       <div class="grow">
         <h3>Running for <span class="mono-num" id="goElapsed">${fmt(now() - board.startsAt)}</span></h3>
-        <p class="meta" style="margin:4px 0 0">Time since the go. Reset when you want to gather everyone in the lobby again.</p>
+        <p class="cat" style="margin:4px 0 0">${stageLine()}</p>
+        <p class="meta" style="margin:4px 0 0">${still
+          ? `${still} ${still === 1 ? "player is" : "players are"} still going.`
+          : "Everyone has finished this level."} Moving up keeps every point on the board and nobody has to rejoin &mdash; they wait in the lobby for your next go.</p>
       </div>
+      <button class="btn" id="advanceBtn" type="button">${advanceLabel()}</button>
     </div>`;
   }
 
@@ -173,7 +196,7 @@
     const pct = board.puzzleCount ? Math.round((shared / board.puzzleCount) * 100) : 0;
     return `<div class="settings">
       <h4>Level</h4>
-      <p class="meta" style="margin:0">Start on Level 1 and move up between rounds if people are enjoying it. Nothing is ever removed from the word list &mdash; the level just decides which end of it a round draws on.</p>
+      <p class="meta" style="margin:0">Start on Level 1 and move up as people warm up. Nothing is ever removed from the word list &mdash; the level just decides which end of it a round draws on. Mid-session, use <b>${advanceLabel()}</b> on the strip above rather than these buttons: it carries the leaderboard over, where these redraw the level everyone is waiting on.</p>
       <div class="seg" style="margin:10px 0 0" role="group" aria-label="Level">
         ${(board.levels || []).map((l) => `<button data-level="${l.id}" aria-pressed="${l.id === board.level}" type="button" ${board.phase === "running" ? "disabled" : ""}>${esc(l.label)}</button>`).join("")}
       </div>
@@ -237,7 +260,7 @@
     return `<div class="hostbar">
       <button class="btn ghost sm" id="resetBtn" type="button">Reset and kick everyone</button>
       <button class="btn ghost sm" id="signOut" type="button">Sign out</button>
-      <span class="meta">Clears the board, the removed list and everyone's session &mdash; they each have to join again from scratch. Tap twice to confirm.</span>
+      <span class="meta">Clears the board, the removed list and everyone's session &mdash; they each have to join again from scratch. Tap twice to confirm. You do not need this to change level: <b>${advanceLabel()}</b> on the strip above keeps everyone and their points.</span>
       <p class="meta" id="hostMsg"></p>
     </div>`;
   }
@@ -280,6 +303,19 @@
         hostMsg(e.message, "err");
       }
     };
+
+    /* Two taps, because the level just played is banked and its words cleared --
+       and anyone mid-word loses it. Not destructive like a reset, but not
+       something to fire by brushing past it either. */
+    const adv = root.querySelector("#advanceBtn");
+    if (adv) {
+      const still = board.players.filter((p) => !p.done).length;
+      wireDanger(adv, still ? `Tap again (${still} still going)` : "Tap again to move up", async () => {
+        const out = await api("/api/admin/advance", { method: "POST" });
+        autoFlipped = false;
+        hostMsg(`${out.levelName ? `Level ${out.level} - ${out.levelName}. ` : ""}${out.banked} ${out.banked === 1 ? "player keeps their" : "players keep their"} points${out.unfinished ? `, ${out.unfinished} had a word unfinished` : ""}. Press Start when they are ready.`, "ok");
+      });
+    }
 
     root.querySelectorAll("[data-level]").forEach((b) => {
       b.onclick = async () => {
@@ -515,19 +551,19 @@
         <div class="pod p${n + 1}">
           <div class="pos">${["1st", "2nd", "3rd"][n]}${p.done ? " &middot; finished" : ""}</div>
           <div class="nm">${esc(p.name)}</div>
-          <div class="ln"><span>Points <b>${p.score}</b></span><span>Solved <b>${p.solved}/${board.puzzleCount}</b></span></div>
+          <div class="ln"><span>Points <b>${p.score}</b></span><span>Solved <b>${p.solved}/${p.words}</b></span></div>
           <div class="ln" style="margin-top:4px"><span>Time <b data-pid="${esc(p.id)}">${fmt(liveMs(p))}</b></span>${p.reveals || p.hints ? `<span>Used <b>${(p.reveals || 0) + (p.hints || 0)}</b></span>` : ""}</div>
         </div>`).join("")}</div>` : ""}
 
       <div class="table-scroll">
         ${list.length ? `<table class="board">
-          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} puzzles</th><th>Points</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters taken beyond the free ones">Letters</th><th title="Bigger hints asked for">Hints</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Player</th><th>${board.puzzleCount} this level</th><th>Points</th><th>Solved</th><th>Time</th><th>Guesses</th><th title="Words given up">Skipped</th><th title="Letters taken beyond the free ones">Letters</th><th title="Bigger hints asked for">Hints</th><th></th></tr></thead>
           <tbody>${list.map((p, n) => `<tr>
             <td class="rank mono-num ${n === 0 ? "top" : ""}">${n + 1}</td>
             <td><div class="who-name">${esc(p.name)}</div><div class="who-sub">${board.phase !== "running" ? "In the lobby" : (p.done ? "Finished" : (p.online ? "On puzzle " + (p.idx + 1) : "Away &middot; puzzle " + (p.idx + 1)))}${p.late ? `<span class="golate" title="Joined after the go, so their clock started later">late</span>` : ""}</div></td>
             <td><div class="pips">${p.results.map((v, i) => `<div class="${pipClass(v, i, p.idx, p.done)}" title="Puzzle ${i + 1}"></div>`).join("")}</div></td>
             <td class="score mono-num">${p.score}</td>
-            <td class="mono-num" style="color:var(--muted)">${p.solved}/${board.puzzleCount}</td>
+            <td class="mono-num" style="color:var(--muted)">${p.solved}/${p.words}</td>
             <td class="t-cell ${p.done ? "done" : ""}" data-pid="${esc(p.id)}">${fmt(liveMs(p))}</td>
             <td class="mono-num" style="color:var(--muted)">${p.guesses}</td>
             <td class="mono-num"><span class="useno ${p.skips ? "used" : ""}">${p.skips || 0}</span></td>
@@ -552,7 +588,7 @@
         ${settingsMarkup()}
         ${blockedMarkup()}
         ${hostbarMarkup()}
-        <div class="notice">Ranking: <b>points</b>, then fastest time, then fewest guesses. A solved word is worth ${(board.scoring || {}).solved || 100}, plus ${(board.scoring || {}).perSpareGuess || 10} for each guess you did not need. A letter you chose to take costs ${(board.scoring || {}).perLetter || 15} and a bigger hint ${(board.scoring || {}).perHint || 10} &mdash; the letters the level hands out are free. A solve never drops below ${(board.scoring || {}).floor || 10}, so it always beats a miss. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.
+        <div class="notice">Ranking: <b>points</b>, then fastest time, then fewest guesses &mdash; all of it added up across every level this session has played, so moving up a level builds on the board rather than restarting it. A solved word is worth ${(board.scoring || {}).solved || 100}, plus ${(board.scoring || {}).perSpareGuess || 10} for each guess you did not need. A letter you chose to take costs ${(board.scoring || {}).perLetter || 15} and a bigger hint ${(board.scoring || {}).perHint || 10} &mdash; the letters the level hands out are free. A solve never drops below ${(board.scoring || {}).floor || 10}, so it always beats a miss. Times are measured and enforced on the server, and tick live while someone is mid-word. <b>Focus</b> (or the F key) strips this screen back to the board alone for sharing.
         <span style="opacity:.55">Running build <b>${esc((board.build && board.build.sha) || "dev")}</b>, made ${esc((board.build && board.build.at) || "?")}. If that is not your latest commit, rebuild: <code>./scripts/local.sh</code></span></div>
       </div>`;
     const fb = $("focusBtn");
