@@ -277,11 +277,14 @@
           ${!closed && c.bigHint ? `<p class="bighint">${esc(c.bigHint)}</p>` : ""}
 
           <div class="grid" id="grid" style="--len:${c.length}">${gridRows()}</div>
+          ${!closed && freeSlots().length === 0
+            ? `<p class="bighint">Every letter is placed &mdash; press Enter to send it.</p>` : ""}
           <p class="toast" id="toast"></p>
           ${closed ? outcome() : keyboard() + lifelines()}
         </div>
         <p class="meta" style="margin-top:12px">
           Green = right letter, right spot. Amber = right letter, wrong spot.
+          A letter you have landed green stays where it is on your next guess, so you only ever type the blanks.
           <b>The clock is running.</b> If several people solve the same number of words, the fastest wins.
         </p>
       </div>`;
@@ -353,14 +356,25 @@
   }
 
   /*
-   * A letter you are given is placed in the grid where it belongs, locked, rather
-   * than listed underneath. So `typed` holds only the letters for the positions
-   * still blank, and the guess is assembled from both when it is submitted.
+   * Every position whose letter is already settled, so `typed` holds only the
+   * blanks and the guess is assembled from both when it is submitted.
+   *
+   * Two ways a position gets settled: a letter you were given or bought, and a
+   * letter you landed green yourself. Both are known-correct for this word, so
+   * neither is yours to type again -- a green used to vanish when the row
+   * advanced and had to be retyped every single guess.
    */
   function knownAt() {
     const m = new Map();
+    for (const r of state.current.rows || []) {
+      for (let i = 0; i < r.marks.length; i++) if (r.marks[i] === "hit") m.set(i, r.guess[i]);
+    }
     for (const r of state.current.revealed || []) m.set(r.i, r.ch);
     return m;
+  }
+  /** Which of those were handed over rather than earned, for the grid's benefit. */
+  function givenAt() {
+    return new Set((state.current.revealed || []).map((r) => r.i));
   }
   function freeSlots() {
     const known = knownAt();
@@ -381,6 +395,7 @@
     const c = state.current;
     const n = c.length;
     const known = knownAt();
+    const given = givenAt();
     const slots = freeSlots();
     let html = "";
     for (let row = 0; row < state.maxTries; row++) {
@@ -393,9 +408,11 @@
           cls += " " + done.marks[k];
           ch = done.guess[k];
         } else if (isCur) {
-          /* Given letters sit in the row being typed only, not on every row below. */
+          /* Settled letters sit in the row being typed only, not on every row
+             below. A bought one carries the given marker; one you placed
+             yourself is just green, because you earned it. */
           if (known.has(k)) {
-            cls += " hit given";
+            cls += given.has(k) ? " hit given" : " hit carried";
             ch = known.get(k);
           } else {
             const at = slots.indexOf(k);
